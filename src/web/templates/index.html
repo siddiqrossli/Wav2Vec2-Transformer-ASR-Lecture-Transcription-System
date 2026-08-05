@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClassScript - Lecture Transcriber</title>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem("theme");
+                if (saved === "dark" || saved === "light") {
+                    document.documentElement.dataset.theme = saved;
+                }
+            } catch (e) {
+                /* ignore storage access issues */
+            }
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="landing-page{% if request.args.get('upload') %} upload-mode{% endif %}">
+    {% if request.args.get('upload') %}
+        <div class="landing-upload-shell">
+            <header class="landing-nav upload-nav">
+                <a href="{{ url_for('index') }}" class="landing-brand" aria-label="ClassScript Home">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="ClassScript">
+                    <span>
+                        <strong>ClassScript</strong>
+                        <small>Lecture Transcriber</small>
+                    </span>
+                </a>
+
+                <nav class="landing-links" aria-label="Landing navigation">
+                    <a href="{{ url_for('index') }}#home">Home</a>
+                    <a href="{{ url_for('index') }}#how">How It Works</a>
+                    <a href="{{ url_for('library_page') }}" class="{% if request.endpoint == 'library_page' %}active{% endif %}">Library</a>
+                </nav>
+
+                <button type="button" class="theme-toggle landing-theme" onclick="toggleTheme()" title="Toggle theme">
+                    <i class="fa-solid fa-moon"></i>
+                    <span>Theme</span>
+                </button>
+            </header>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-container landing-flashes upload-flashes">
+                        {% for category, message in messages %}
+                            <div class="flash-message {{ category }}" role="status" aria-live="polite">
+                                <span class="flash-message-text">{{ message }}</span>
+                                <button type="button" class="flash-close-btn" aria-label="Dismiss message" onclick="this.closest('.flash-message, .flash, .alert')?.remove()">&times;</button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <main class="upload-route-content">
+                <div class="upload-layout landing-upload-layout">
+                    <section class="upload-card">
+                        <div class="section-heading">
+                            <span class="section-icon"><i class="fa-solid fa-microphone-lines"></i></span>
+                            <div>
+                                <h2>Start Transcription</h2>
+                                <p>Upload lecture audio or video to get a searchable, timestamped transcript.</p>
+                            </div>
+                        </div>
+
+                        <form action="{{ url_for('transcribe') }}" method="POST" enctype="multipart/form-data" id="upload-form">
+                            <div class="upload-area" id="drop-zone">
+                                <input type="file" name="file" id="file-input"
+                                       accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.mp4,.mov,.avi,.mkv,.webm" required>
+
+                                <div class="upload-content">
+                                    <div class="upload-icon">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                                    </div>
+                                    <h3>Drop file here</h3>
+                                    <p>or click to browse from your computer</p>
+                                    <small>WAV, MP3, MP4, M4A, FLAC - converted to 16 kHz mono</small>
+                                </div>
+
+                                <div class="file-selected" id="file-selected" style="display: none;">
+                                    <i class="fa-solid fa-file-audio"></i>
+                                    <div>
+                                        <strong id="filename"></strong>
+                                        <small>Ready to transcribe</small>
+                                    </div>
+                                    <button type="button" class="remove-file" onclick="clearFile()" aria-label="Remove file">&times;</button>
+                                </div>
+                            </div>
+
+                            <div class="details-grid">
+                                <div class="form-group full">
+                                    <label for="lecture_title">Lecture Title</label>
+                                    <input type="text" id="lecture_title" name="lecture_title"
+                                           placeholder="e.g., Introduction to Machine Learning">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="course_code">Course Code</label>
+                                    <input type="text" id="course_code" name="course_code" placeholder="e.g., CSC 101">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="speaker_name">Speaker Name</label>
+                                    <input type="text" id="speaker_name" name="speaker_name" placeholder="e.g., Dr. Jane Smith">
+                                </div>
+
+                                <div class="form-group full decode-group">
+                                    <label for="decode_mode">Decoding Method</label>
+                                    <div class="decode-options">
+                                        <label class="decode-option">
+                                            <input type="radio" name="decode_mode" value="lm" checked>
+                                            <span class="decode-card">
+                                                <strong>N-gram LM Beam Search</strong>
+                                                <small>Higher accuracy (recommended)</small>
+                                            </span>
+                                        </label>
+                                        <label class="decode-option">
+                                            <input type="radio" name="decode_mode" value="greedy">
+                                            <span class="decode-card">
+                                                <strong>Greedy CTC Decoding</strong>
+                                                <small>Faster, simpler decoding</small>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="primary-btn" id="submit-btn">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                Start Transcription
+                            </button>
+
+                            <div class="loading" id="loading" style="display: none;">
+                                <div id="transcribe-progress-slot"></div>
+                                <p class="loading-hint">Processing your lecture - do not close this page.</p>
+                            </div>
+                        </form>
+                    </section>
+
+                    <aside class="info-card">
+                        <h3><i class="fa-solid fa-route"></i> Workflow</h3>
+
+                        <div class="workflow-item">
+                            <span>01</span>
+                            <div>
+                                <strong>Upload media</strong>
+                                <p>Audio or video is saved and prepared for transcription.</p>
+                            </div>
+                        </div>
+
+                        <div class="workflow-item">
+                            <span>02</span>
+                            <div>
+                                <strong>Preprocess audio</strong>
+                                <p>FFmpeg converts to 16 kHz mono waveform.</p>
+                            </div>
+                        </div>
+
+                        <div class="workflow-item">
+                            <span>03</span>
+                            <div>
+                                <strong>Run ASR decoding</strong>
+                                <p>Choose LM beam search or greedy CTC on the left.</p>
+                            </div>
+                        </div>
+
+                        <div class="workflow-item">
+                            <span>04</span>
+                            <div>
+                                <strong>Review transcript</strong>
+                                <p>Search, copy, download, keywords, and summary on the result page.</p>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </main>
+        </div>
+    {% else %}
+        <header class="landing-nav fixed-landing-nav">
+            <a href="#home" class="landing-brand" aria-label="ClassScript Home">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="ClassScript">
+                <span>
+                    <strong>ClassScript</strong>
+                    <small>Lecture Transcriber</small>
+                </span>
+            </a>
+
+            <nav class="landing-links" aria-label="Landing navigation">
+                <a href="#home" class="active">Home</a>
+                <a href="#how">How It Works</a>
+                <a href="{{ url_for('library_page') }}" class="{% if request.endpoint == 'library_page' %}active{% endif %}">Library</a>
+            </nav>
+
+            <button type="button" class="theme-toggle landing-theme" onclick="toggleTheme()" title="Toggle theme">
+                <i class="fa-solid fa-moon"></i>
+                <span>Theme</span>
+            </button>
+        </header>
+
+        <main class="landing-scroll" aria-live="polite">
+            <section id="home" class="snap-section home-section">
+                <div class="hero-copy">
+                    <p class="landing-kicker">Transformer-based lecture transcription</p>
+                    <h1>Transform Lecture Media Into Searchable Text</h1>
+                    <p class="hero-subtitle">
+                        Upload lecture recordings and convert them into organized, searchable transcripts for easier
+                        revision and learning.
+                    </p>
+                    <a href="{{ url_for('index') }}?upload=1" class="hero-cta">
+                        Get Started
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </a>
+                </div>
+
+                <div class="asr-illustration" aria-label="Animated ASR transcript illustration">
+                    <div class="lecture-file-card">
+                        <i class="fa-solid fa-file-video"></i>
+                        <div>
+                            <strong>lecture_video.mp4</strong>
+                            <span>Uploaded</span>
+                        </div>
+                    </div>
+
+                    <div class="processing-orb">
+                        <span></span>
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+
+                    <div class="audio-wave premium-wave">
+                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                    </div>
+
+                    <div class="transcript-card-mini">
+                        <div class="mini-header">
+                            <span></span>
+                            <strong>Transcript preview</strong>
+                        </div>
+                        <p class="typing-line wide"></p>
+                        <p class="typing-line medium"></p>
+                        <p class="typing-line short"></p>
+                        <div class="search-pill"><i class="fa-solid fa-magnifying-glass"></i> searchable text</div>
+                    </div>
+
+                    <div class="illustration-path path-one"></div>
+                    <div class="illustration-path path-two"></div>
+                </div>
+            </section>
+
+            <section id="how" class="snap-section how-section">
+                <div class="how-workflow">
+                    <div class="section-copy center-copy">
+                        <p class="landing-kicker">Process</p>
+                        <h2>How It Works</h2>
+                        <p>ClassScript follows a focused ASR workflow from lecture upload to searchable transcript.</p>
+                    </div>
+
+                    <div class="steps-grid timeline-steps">
+                        <article class="process-step">
+                            <span>01</span>
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <h3>Upload Lecture</h3>
+                        </article>
+                        <article class="process-step">
+                            <span>02</span>
+                            <i class="fa-solid fa-file-audio"></i>
+                            <h3>Audio Extraction</h3>
+                        </article>
+                        <article class="process-step">
+                            <span>03</span>
+                            <i class="fa-solid fa-wave-square"></i>
+                            <h3>Audio Preprocessing</h3>
+                        </article>
+                        <article class="process-step">
+                            <span>04</span>
+                            <i class="fa-solid fa-brain"></i>
+                            <h3>Transformer ASR</h3>
+                        </article>
+                        <article class="process-step">
+                            <span>05</span>
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <h3>Searchable Transcript</h3>
+                        </article>
+                    </div>
+                </div>
+
+                <div class="about-strip" aria-label="About ClassScript">
+                    <article class="about-card uitm-card">
+                        <div class="uitm-logo-mark">
+                            <img src="{{ url_for('static', filename='images/UiTM.png') }}" alt="UiTM logo">
+                        </div>
+                        <h3>Universiti Teknologi MARA</h3>
+                    </article>
+
+                    <article class="about-card project-card">
+                        <p class="landing-kicker">About ClassScript</p>
+                        <h3>Automatic Transcription of English Lecture Videos Using Transformer-Based ASR</h3>
+                        <p>
+                            ClassScript helps students convert lecture recordings into searchable transcripts for faster
+                            revision, easier keyword searching, and better accessibility.
+                        </p>
+                    </article>
+
+                    <article class="about-card owner-card">
+                        <div class="profile-photo-slot">
+                            <img src="{{ url_for('static', filename='images/siddiq.png') }}" alt="Muhamad Siddiq Bin Rossli">
+                        </div>
+                        <div class="owner-copy">
+                            <h3>Muhamad Siddiq<br>Bin Rossli</h3>
+                            <p>Bachelor of Computer Science (Hons.)</p>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </main>
+    {% endif %}
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        (function () {
+            var scroller = document.querySelector(".landing-scroll");
+            var links = Array.prototype.slice.call(document.querySelectorAll(".landing-links a"));
+            if (!scroller || !links.length) return;
+            var sections = Array.prototype.slice.call(document.querySelectorAll(".snap-section"));
+            var wheelLocked = false;
+
+            function setActive() {
+                var current = "home";
+                sections.forEach(function (section) {
+                    var rect = section.getBoundingClientRect();
+                    if (rect.left <= window.innerWidth * 0.42) current = section.id;
+                });
+
+                links.forEach(function (link) {
+                    link.classList.toggle("active", link.getAttribute("href") === "#" + current);
+                });
+            }
+
+            function goToSection(index) {
+                var section = sections[Math.max(0, Math.min(sections.length - 1, index))];
+                if (!section) return;
+                scroller.scrollTo({ left: section.offsetLeft, top: 0, behavior: "smooth" });
+                history.replaceState(null, "", "#" + section.id);
+            }
+
+            scroller.addEventListener("wheel", function (event) {
+                if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+                event.preventDefault();
+                if (wheelLocked) return;
+
+                var currentIndex = Math.round(scroller.scrollLeft / window.innerWidth);
+                var nextIndex = currentIndex + (event.deltaY > 0 ? 1 : -1);
+                goToSection(nextIndex);
+
+                wheelLocked = true;
+                window.setTimeout(function () {
+                    wheelLocked = false;
+                }, 650);
+            }, { passive: false });
+
+            links.forEach(function (link) {
+                link.addEventListener("click", function (event) {
+                    var target = document.querySelector(link.getAttribute("href"));
+                    if (!target) return;
+                    event.preventDefault();
+                    goToSection(sections.indexOf(target));
+                });
+            });
+
+            scroller.addEventListener("scroll", setActive, { passive: true });
+            window.addEventListener("hashchange", setActive);
+            window.addEventListener("resize", function () {
+                var currentIndex = Math.round(scroller.scrollLeft / window.innerWidth);
+                scroller.scrollTo({ left: currentIndex * window.innerWidth, top: 0 });
+            });
+            if (window.location.hash) {
+                var initialTarget = document.querySelector(window.location.hash);
+                if (initialTarget) {
+                    window.setTimeout(function () {
+                        goToSection(sections.indexOf(initialTarget));
+                    }, 0);
+                }
+            }
+            setActive();
+        })();
+    </script>
+    <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

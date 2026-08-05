@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ClassScript{% endblock %}</title>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem("theme");
+                if (saved === "dark" || saved === "light") {
+                    document.documentElement.dataset.theme = saved;
+                }
+            } catch (e) {
+                /* ignore storage access issues */
+            }
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="app-shell">
+        <aside class="app-sidebar">
+            <a href="{{ url_for('index') }}" class="brand-block">
+                <img src="{{ url_for('static', filename='images/logo.png') }}"
+                     alt="ClassScript"
+                     class="brand-logo">
+                <div class="brand-text">
+                    <h2>ClassScript</h2>
+                    <p>Lecture Transcriber</p>
+                </div>
+            </a>
+
+            <nav class="tool-nav" aria-label="Main navigation">
+                <a href="{{ url_for('index') }}?upload=1" class="tool-item {% if request.endpoint == 'index' %}active{% endif %}">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    Upload
+                </a>
+                <a href="{{ url_for('library_page') }}" class="tool-item {% if request.endpoint == 'library_page' %}active{% endif %}">
+                    <i class="fa-solid fa-book"></i>
+                    Library
+                </a>
+            </nav>
+
+            <div class="sidebar-features">
+                <p class="sidebar-label">Included tools</p>
+                <ul>
+                    <li><i class="fa-solid fa-check"></i> Timestamped transcript</li>
+                    <li><i class="fa-solid fa-check"></i> Search &amp; export</li>
+                    <li><i class="fa-solid fa-check"></i> Quiz, glossary, RAG</li>
+                </ul>
+            </div>
+
+            <div class="sidebar-footer">
+                <span class="status-dot"></span>
+                <span>Model ready</span>
+            </div>
+        </aside>
+
+        <div class="app-main">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Automatic Speech Recognition</p>
+                    <h1>{% block page_heading %}ClassScript{% endblock %}</h1>
+                </div>
+                <div class="topbar-actions">
+                    <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                        <i class="fa-solid fa-moon"></i>
+                        <span>Theme</span>
+                    </button>
+                </div>
+            </header>
+
+            <main class="content-panel">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-container">
+                            {% for category, message in messages %}
+                                <div class="flash-message {{ category }}" role="status" aria-live="polite">
+                                    <span class="flash-message-text">{{ message }}</span>
+                                    <button type="button" class="flash-close-btn" aria-label="Dismiss message" onclick="this.closest('.flash-message, .flash, .alert')?.remove()">&times;</button>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

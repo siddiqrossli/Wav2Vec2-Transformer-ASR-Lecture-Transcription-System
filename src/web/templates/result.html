@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}{{ transcript.title }} - Transcript{% endblock %}
+{% block page_heading %}Transcript Result{% endblock %}
+{% block body_class %}result-page{% endblock %}
+
+{% block content %}
+<div class="result-layout">
+
+    <section class="result-main">
+        <div class="result-toolbar">
+            <a href="{{ url_for('index') }}?upload=1" class="soft-btn">
+                <i class="fa-solid fa-arrow-left"></i>
+                New Transcription
+            </a>
+
+            <div class="toolbar-actions">
+                <div class="export-menu">
+                    <button type="button" class="icon-btn" onclick="copyToClipboard('plain')" title="Copy plain text">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                    <button type="button" class="icon-btn subtle" onclick="copyToClipboard('timestamped')" title="Copy with timestamps">
+                        <i class="fa-solid fa-clock"></i>
+                    </button>
+                </div>
+
+                <div class="export-menu">
+                    <button type="button" class="icon-btn" onclick="downloadTXT('plain')" title="Download plain TXT">
+                        <i class="fa-solid fa-file-lines"></i>
+                    </button>
+                    <button type="button" class="icon-btn subtle" onclick="downloadTXT('timestamped')" title="Download timestamped TXT">
+                        <i class="fa-solid fa-file-export"></i>
+                    </button>
+                </div>
+
+                <button type="button" class="icon-btn" onclick="exportPdfFile()" title="Download PDF">
+                    <i class="fa-solid fa-file-pdf"></i>
+                </button>
+                <button type="button" class="icon-btn" onclick="exportDocx()" title="Download DOCX">
+                    <i class="fa-solid fa-file-word"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="transcript-card" id="transcriptBox">
+            <div class="transcript-header">
+                <div>
+                    <h2>{{ transcript.title }}</h2>
+
+                    <div class="meta-row">
+                        {% if transcript.course_code %}
+                            <span class="badge">{{ transcript.course_code }}</span>
+                        {% endif %}
+
+                        <span>
+                            <i class="fa-solid fa-user"></i>
+                            {{ transcript.speaker or 'Unknown Speaker' }}
+                        </span>
+
+                        <span>
+                            <i class="fa-solid fa-clock"></i>
+                            {{ transcript.duration }}
+                        </span>
+
+                        <span>
+                            <i class="fa-solid fa-font"></i>
+                            {{ transcript.word_count }} words
+                        </span>
+
+                        <span>
+                            <i class="fa-solid fa-book-open"></i>
+                            {{ transcript.reading_time }}
+                        </span>
+
+                        <span>
+                            <i class="fa-solid fa-calendar-check"></i>
+                            {{ transcript.processed_at }}
+                        </span>
+
+                        {% if transcript.decode_mode %}
+                        <span class="decode-badge" title="ASR decoding method">
+                            <i class="fa-solid fa-code-branch"></i>
+                            {{ transcript.decode_mode }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="transcript-controls">
+                <div class="controls-main">
+                    <div class="layout-toggle">
+                        <button type="button" class="toggle-btn active" onclick="showLayout('timestamped')" id="btn-timestamped">
+                            <i class="fa-solid fa-list"></i> Timestamped
+                        </button>
+
+                        <button type="button" class="toggle-btn" onclick="showLayout('paragraph')" id="btn-paragraph">
+                            <i class="fa-solid fa-paragraph"></i> Paragraph
+                        </button>
+                    </div>
+
+                    <div class="search-bar">
+                        <i class="fa-solid fa-search"></i>
+                        <input type="text" id="search-input" placeholder="Search transcript..." onkeyup="searchTranscript()">
+                    </div>
+                </div>
+
+                <div class="controls-translate">
+                    <select id="translate-lang" class="lang-select main-translate-lang">
+                        <option value="Urdu">Urdu</option>
+                        <option value="Hindi">Hindi</option>
+                        <option value="Arabic">Arabic</option>
+                        <option value="French">French</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="Malay" selected>Malay</option>
+                    </select>
+                    <button type="button" class="soft-btn transcript-translate-btn" id="btn-main-translate" onclick="translateLectureMain()" {% if not ai_available %}disabled{% endif %}>
+                        <i class="fa-solid fa-language"></i>
+                        Translate
+                    </button>
+                    <button type="button" class="soft-btn transcript-translate-btn" id="btn-restore-original" onclick="restoreOriginalTranscript()" style="display:none;">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        Original
+                    </button>
+                </div>
+            </div>
+            <div id="translate-progress-slot" class="translate-progress-slot" style="display:none;"></div>
+
+            <div class="transcript-scroll-area">
+                <div class="transcript-content" id="timestamped-layout">
+                    {% for segment in transcript.segments %}
+                    <div class="segment" data-time="{{ segment.timestamp_seconds }}" data-segment-idx="{{ loop.index0 }}">
+                        <span class="timestamp" onclick="jumpToTime({{ segment.timestamp_seconds }})">
+                            {{ segment.timestamp }}
+                        </span>
+
+                        <div class="segment-body">
+                            <p class="segment-text" data-original="{{ segment.text }}">{{ segment.text }}</p>
+                            <button type="button" class="note-btn" onclick="toggleSegmentNote({{ loop.index0 }})" title="Add note">
+                                <i class="fa-solid fa-bookmark"></i>
+                                <span class="note-badge" style="display:none">•</span>
+                            </button>
+                            <div class="segment-note-wrap" id="note-wrap-{{ loop.index0 }}">
+                                <textarea class="segment-note-input" data-idx="{{ loop.index0 }}" rows="2" placeholder="Your note for this segment…"></textarea>
+                                <div class="segment-note-actions">
+                                    <button type="button" class="note-save-btn" onclick="saveSegmentNote({{ loop.index0 }})">Save note</button>
+                                    <span class="note-save-status" id="note-save-status-{{ loop.index0 }}"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <div class="no-results" id="no-results" style="display: none;">
+                        <i class="fa-solid fa-search"></i>
+                        <p>No matches found</p>
+                    </div>
+                </div>
+
+                <div class="paragraph-content" id="paragraph-layout" style="display: none;">
+                    <div class="paragraph-text" id="paragraph-text" data-original="{{ transcript.full_text }}">
+                        {{ transcript.full_text }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <aside class="result-side">
+        <div class="side-tabs" role="tablist">
+            <button type="button" class="side-tab active" data-side-panel="side-panel-overview" role="tab">Overview</button>
+            <button type="button" class="side-tab" data-side-panel="side-panel-study" role="tab">Study</button>
+            <button type="button" class="side-tab" data-side-panel="side-panel-ai" role="tab">AI</button>
+        </div>
+
+        <div class="side-panels-scroll">
+        <div id="side-panel-overview" class="side-panel active">
+        <div class="audio-card">
+            <h3><i class="fa-solid fa-volume-high"></i> Playback</h3>
+
+            <audio id="audioPlayer" controls>
+                <source src="{{ transcript.audio_url }}">
+                Your browser does not support audio playback.
+            </audio>
+        </div>
+
+        <div class="stats-card">
+            <h3>Transcript Details</h3>
+
+            <div class="stat-row">
+                <span>Duration</span>
+                <strong>{{ transcript.duration }}</strong>
+            </div>
+
+            <div class="stat-row">
+                <span>Word Count</span>
+                <strong>{{ transcript.word_count }}</strong>
+            </div>
+
+            <div class="stat-row">
+                <span>Reading Time</span>
+                <strong>{{ transcript.reading_time }}</strong>
+            </div>
+
+            <div class="stat-row">
+                <span>Segments</span>
+                <strong>{{ transcript.num_segments }}</strong>
+            </div>
+
+            {% if transcript.decode_mode %}
+            <div class="stat-row">
+                <span>Decoding Method</span>
+                <strong class="decode-label">{{ transcript.decode_mode }}</strong>
+            </div>
+            {% endif %}
+
+            <div class="stat-row">
+                <span>Processed</span>
+                <strong>{{ transcript.processed_at }}</strong>
+            </div>
+        </div>
+
+        </div>
+
+        <div id="side-panel-study" class="side-panel">
+        <div class="ai-card ai-card-study">
+            <h3><i class="fa-solid fa-graduation-cap"></i> Study tools</h3>
+
+            <button type="button" onclick="generateQuiz()" {% if not ai_available %}disabled{% endif %}>
+                <i class="fa-solid fa-circle-question"></i> Study quiz
+            </button>
+            <div id="quiz-panel" class="analysis-panel">
+                <div id="quiz-output" class="ai-output muted-text">MCQs from this lecture.</div>
+            </div>
+
+            <button type="button" onclick="generateGlossary()" {% if not ai_available %}disabled{% endif %}>
+                <i class="fa-solid fa-book"></i> Glossary
+            </button>
+            <div id="glossary-panel" class="analysis-panel">
+                <div id="glossary-output" class="ai-output muted-text"></div>
+            </div>
+
+            <button type="button" onclick="generateFlashcards()" {% if not ai_available %}disabled{% endif %}>
+                <i class="fa-solid fa-layer-group"></i> Flashcards
+            </button>
+            <div id="flashcards-panel" class="analysis-panel">
+                <div id="flashcards-output" class="ai-output muted-text"></div>
+            </div>
+
+            <a href="{{ url_for('library_page') }}" class="soft-btn library-link-btn">
+                <i class="fa-solid fa-database"></i> Search all lectures
+            </a>
+        </div>
+
+        <div class="ai-card">
+            <h3><i class="fa-solid fa-bookmark"></i> Notes</h3>
+            <p class="muted-text small-hint">Saved notes by timestamp.</p>
+            <div id="notes-overview" class="notes-overview"></div>
+        </div>
+        </div>
+
+        <div id="side-panel-ai" class="side-panel">
+        <div class="ai-card ai-card-llm">
+            <h3><i class="fa-solid fa-robot"></i> AI Assistant</h3>
+
+            {% if ai_available %}
+            <p class="ai-status ok"><i class="fa-solid fa-circle"></i> Ready — {{ ai_model }}</p>
+            {% else %}
+            <div class="ai-setup-box">
+                <p><strong>AI is off</strong> — create <code>src/web/.env</code> with your API key, then restart the server.</p>
+                <pre class="env-snippet">OPENAI_API_KEY=sk-your-key-here
+LLM_MODEL=gpt-4o-mini</pre>
+                <p class="muted-text small-hint">Free local option: use Ollama — see <code>.env.example</code></p>
+            </div>
+            {% endif %}
+
+            <button type="button" id="btn-ai-summary" onclick="generateAiSummary()" {% if not ai_available %}disabled{% endif %}>
+                <i class="fa-solid fa-sparkles"></i> AI Summary
+            </button>
+            <div id="ai-summary-panel" class="analysis-panel ai-output-panel ai-switch-panel open">
+                <div id="ai-summary-output" class="ai-output muted-text">
+                    Click “AI Summary” for a structured overview of the full lecture.
+                </div>
+            </div>
+
+            <button type="button" class="ai-chat-toggle" onclick="openAiPanel('ai-chat-panel')">
+                <i class="fa-solid fa-comments"></i> Chat about lecture
+            </button>
+            <div id="ai-chat-panel" class="analysis-panel ai-chat-panel ai-switch-panel">
+                <div id="ai-chat-log" class="ai-chat-log">
+                    <div class="chat-msg chat-msg-assistant">
+                        <span class="chat-msg-label">Assistant</span>
+                        <div class="chat-msg-body">Ask about this lecture — main ideas, definitions, or what the speaker said.</div>
+                    </div>
+                </div>
+                <div class="ai-chat-compose">
+                    <textarea id="ai-chat-input" rows="2" placeholder="Ask a question…" {% if not ai_available %}disabled{% endif %}></textarea>
+                    <div class="ai-chat-actions">
+                        <button type="button" class="chat-clear-btn" onclick="clearAiChat()">Clear</button>
+                        <button type="button" id="btn-ai-chat-send" class="chat-send-btn" onclick="sendAiChat()" {% if not ai_available %}disabled{% endif %}>
+                            <i class="fa-solid fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+        </div>
+    </aside>
+
+</div>
+
+<script>
+    window.fullTranscript = {{ transcript.full_text | tojson }};
+    window.transcriptSegments = {{ transcript.segments | tojson }};
+    window.transcriptTitle = {{ transcript.title | tojson }};
+    window.transcriptDecodeMode = {{ transcript.decode_mode | default('Unknown') | tojson }};
+    window.transcriptMeta = {
+        speaker: {{ (transcript.speaker or '') | tojson }},
+        course: {{ (transcript.course_code or '') | tojson }},
+        duration: {{ transcript.duration | tojson }},
+        processedAt: {{ transcript.processed_at | tojson }},
+        wordCount: {{ transcript.word_count | tojson }},
+        readingTime: {{ transcript.reading_time | tojson }}
+    };
+    window.aiAvailable = {{ ai_available | tojson }};
+    window.transcriptJobId = {{ transcript.job_id | tojson }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/ai.js') }}"></script>
+<script src="{{ url_for('static', filename='js/features.js') }}"></script>
+{% endblock %}

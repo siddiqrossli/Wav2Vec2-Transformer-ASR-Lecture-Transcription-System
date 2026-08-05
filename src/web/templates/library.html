@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Lecture Library - ClassScript{% endblock %}
+{% block page_heading %}Lecture Library{% endblock %}
+{% block body_class %}library-page{% endblock %}
+
+{% block content %}
+<div class="library-layout">
+    <section class="library-card library-card-list" id="library-card-list">
+        <div class="library-list-head">
+            <h2><i class="fa-solid fa-database"></i> Saved lectures</h2>
+            <button type="button" class="soft-btn library-select-toggle" id="library-select-toggle">Select</button>
+        </div>
+        <div class="library-selection-actions" id="library-selection-actions" style="display:none;">
+            <button type="button" class="soft-btn" id="library-select-all-btn">Select all</button>
+            <button type="button" class="soft-btn" id="library-cancel-select-btn">Cancel</button>
+            <button type="button" class="soft-btn library-delete-btn" id="library-delete-selected-btn">Delete</button>
+        </div>
+        <p class="muted-text">Transcripts are indexed for cross-lecture search (RAG). ASR decoding is unchanged.</p>
+
+        {% if lectures %}
+        <ul class="library-list" id="library-list">
+            {% for lec in lectures %}
+            <li data-job-id="{{ lec.job_id }}">
+                <div class="library-row-select">
+                    <input type="checkbox" class="library-select-checkbox" aria-label="Select lecture">
+                </div>
+                <div class="library-row-content">
+                    <strong>{{ lec.title }}</strong>
+                    <span>{{ lec.course_code or '' }} · {{ lec.duration or '' }} · {{ lec.processed_at or '' }}</span>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted-text">No saved lectures yet. Upload and transcribe to build your library.</p>
+        {% endif %}
+    </section>
+
+    <div class="library-side">
+        <section class="library-card library-search">
+            <h2><i class="fa-solid fa-magnifying-glass"></i> Search all lectures</h2>
+            <div class="library-search-row library-search-form">
+                <input type="text" id="rag-search-input" placeholder="Search keywords across saved transcripts…">
+                <button type="button" class="primary-btn compact" onclick="runRagSearch()">Search</button>
+            </div>
+            <div id="rag-search-results" class="rag-results"></div>
+        </section>
+
+        <section class="library-card">
+            <h2><i class="fa-solid fa-comments"></i> Ask across lectures</h2>
+            {% if ai_available %}
+            <p class="ai-status ok"><i class="fa-solid fa-circle"></i> Uses AI + retrieved excerpts</p>
+            {% else %}
+            <p class="ai-status warn">Configure <code>OPENAI_API_KEY</code> in <code>.env</code> for AI answers.</p>
+            {% endif %}
+            <textarea id="rag-ask-input" rows="3" placeholder="e.g., What did we cover about gradient descent?" {% if not ai_available %}disabled{% endif %}></textarea>
+            <button type="button" id="ask-library-btn" class="primary-btn compact" onclick="runRagAsk()" {% if not ai_available %}disabled{% endif %}>
+                Ask library
+            </button>
+            <div id="rag-ask-answer" class="rag-answer muted-text">Answers cite matching lecture excerpts.</div>
+            <div id="rag-ask-sources" class="rag-results"></div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.aiAvailable = {{ ai_available | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/features.js') }}"></script>
+{% endblock %}
