@@ -66,6 +66,7 @@ async function generateAiSummary() {
         const data = await runWithProgress(output, "Generating AI summary", () =>
             fetchAi("/api/ai/summarize", getTranscriptPayload())
         );
+        output.classList.remove("muted-text");
         output.innerHTML = formatAiMarkdown(data.summary || "");
         showToast("AI summary ready.");
     } catch (err) {

@@ -866,6 +866,21 @@ function initSideTabs() {
     });
 }
 
+function toggleSidePanelExpand(btn) {
+    const layout = document.querySelector(".result-layout");
+    if (!layout) return;
+    const isExpanded = layout.classList.toggle("side-expanded");
+    document.querySelectorAll(".btn-card-expand").forEach(b => {
+        const icon = b.querySelector("i");
+        if (icon) {
+            icon.className = isExpanded ? "fa-solid fa-compress" : "fa-solid fa-expand";
+        }
+        b.title = isExpanded ? "Collapse panel" : "Expand panel";
+        b.setAttribute("aria-label", isExpanded ? "Collapse panel" : "Expand panel");
+    });
+}
+window.toggleSidePanelExpand = toggleSidePanelExpand;
+
 document.addEventListener("DOMContentLoaded", () => {
     initSideTabs();
     if (window.transcriptJobId) loadLectureNotes();

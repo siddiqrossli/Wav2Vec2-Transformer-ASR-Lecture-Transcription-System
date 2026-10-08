@@ -876,6 +876,11 @@ input:focus {
     gap: 18px;
     min-height: 0;
     min-width: 0;
+    transition: grid-template-columns 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.result-layout.side-expanded {
+    grid-template-columns: minmax(0, 1fr) minmax(500px, 640px);
 }
 
 .result-main {
@@ -1412,6 +1417,54 @@ input:focus {
     background: linear-gradient(180deg, #ffffff, #f7fbfc);
 }
 
+.card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.card-header-row h3 {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.ai-card .btn-card-expand {
+    width: 32px !important;
+    max-width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid var(--border) !important;
+    background: var(--panel-soft, #f8fafc) !important;
+    color: var(--muted) !important;
+    border-radius: 8px !important;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: normal;
+    text-align: center !important;
+    line-height: 1;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    transition: all 0.18s ease;
+}
+
+.ai-card .btn-card-expand:hover {
+    color: var(--primary) !important;
+    border-color: var(--primary) !important;
+    background: #eef6f8 !important;
+    transform: scale(1.05);
+}
+
 .ai-card button {
     width: 100%;
     max-width: 100%;
@@ -1432,6 +1485,22 @@ input:focus {
 .ai-card button:hover {
     color: var(--primary);
     border-color: var(--primary);
+}
+
+/* Centered button boards and summary placeholder */
+.ai-card-study > button,
+#btn-ai-summary,
+.ai-chat-toggle {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    gap: 8px !important;
+}
+
+#ai-summary-output.muted-text {
+    text-align: center;
+    padding: 6px 0;
 }
 
 .analysis-panel {
@@ -2296,6 +2365,18 @@ mark.search-hit,
 [data-theme="dark"] .soft-btn:hover,
 [data-theme="dark"] .icon-btn:hover {
     border-color: var(--primary);
+}
+
+[data-theme="dark"] .ai-card .btn-card-expand {
+    background: #0f172a !important;
+    color: var(--muted) !important;
+    border-color: var(--border) !important;
+}
+
+[data-theme="dark"] .ai-card .btn-card-expand:hover {
+    color: var(--primary) !important;
+    border-color: var(--primary) !important;
+    background: rgba(37, 99, 235, 0.12) !important;
 }
 
 [data-theme="dark"] .chat-send-btn,

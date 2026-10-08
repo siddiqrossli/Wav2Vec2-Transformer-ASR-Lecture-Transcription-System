@@ -224,7 +224,12 @@
 
         <div id="side-panel-study" class="side-panel">
         <div class="ai-card ai-card-study">
-            <h3><i class="fa-solid fa-graduation-cap"></i> Study tools</h3>
+            <div class="card-header-row">
+                <h3><i class="fa-solid fa-graduation-cap"></i> Study tools</h3>
+                <button type="button" class="btn-card-expand" onclick="toggleSidePanelExpand(this)" title="Expand panel" aria-label="Expand panel">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+            </div>
 
             <button type="button" onclick="generateQuiz()" {% if not ai_available %}disabled{% endif %}>
                 <i class="fa-solid fa-circle-question"></i> Study quiz
@@ -251,7 +256,12 @@
 
         <div id="side-panel-ai" class="side-panel">
         <div class="ai-card ai-card-llm">
-            <h3><i class="fa-solid fa-robot"></i> AI Assistant</h3>
+            <div class="card-header-row">
+                <h3><i class="fa-solid fa-robot"></i> AI Assistant</h3>
+                <button type="button" class="btn-card-expand" onclick="toggleSidePanelExpand(this)" title="Expand panel" aria-label="Expand panel">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+            </div>
 
             {% if ai_available %}
             <p class="ai-status ok"><i class="fa-solid fa-circle"></i> Ready — {{ ai_model }}</p>
