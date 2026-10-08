@@ -58,7 +58,7 @@ async function generateAiSummary() {
 
     if (!output) return;
 
-    openAiPanel("ai-summary-panel");
+    openAiPanel("ai-summary-panel", true);
     setAiPanelLoading("ai-summary-panel", true);
     if (btn) btn.disabled = true;
 
@@ -152,9 +152,6 @@ function initAiChat() {
 
 function initAiOnReady() {
     initAiChat();
-    if (document.getElementById("side-panel-ai")) {
-        openAiPanel("ai-summary-panel");
-    }
 }
 
 if (document.readyState === "loading") {

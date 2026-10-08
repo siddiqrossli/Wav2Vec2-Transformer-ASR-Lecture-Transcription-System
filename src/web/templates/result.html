@@ -277,10 +277,8 @@ LLM_MODEL=gemini-3.5-flash</pre>
             <button type="button" id="btn-ai-summary" onclick="generateAiSummary()" {% if not ai_available %}disabled{% endif %}>
                 <i class="fa-solid fa-sparkles"></i> AI Summary
             </button>
-            <div id="ai-summary-panel" class="analysis-panel ai-output-panel ai-switch-panel open">
-                <div id="ai-summary-output" class="ai-output muted-text">
-                    Click “AI Summary” for a structured overview of the full lecture.
-                </div>
+            <div id="ai-summary-panel" class="analysis-panel ai-output-panel ai-switch-panel">
+                <div id="ai-summary-output" class="ai-output"></div>
             </div>
 
             <button type="button" class="ai-chat-toggle" onclick="openAiPanel('ai-chat-panel')">

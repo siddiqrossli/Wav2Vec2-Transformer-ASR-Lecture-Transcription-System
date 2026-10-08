@@ -859,9 +859,6 @@ function initSideTabs() {
             tab.classList.add("active");
             document.querySelectorAll(".side-panel").forEach(p => p.classList.remove("active"));
             document.getElementById(panelId)?.classList.add("active");
-            if (panelId === "side-panel-ai") {
-                openAiPanel("ai-summary-panel");
-            }
         });
     });
 }

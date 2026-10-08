@@ -96,15 +96,26 @@ function estimateTranscribeMs(durationSeconds) {
     return Math.max(15000, Math.min(600000, durationSeconds * 1200));
 }
 
-/** Open one panel in the AI sidebar (summary vs chat). */
-function openAiPanel(panelId) {
+/** Open one panel in the AI sidebar (summary vs chat), with toggle support. */
+function openAiPanel(panelId, forceOpen = false) {
     const root = document.getElementById("card-ai-assistant") || document.getElementById("side-panel-ai");
     if (!root) return;
+    const target = document.getElementById(panelId);
+    const isAlreadyOpen = target?.classList.contains("open");
+
     root.querySelectorAll(".ai-switch-panel").forEach((p) => p.classList.remove("open"));
-    document.getElementById(panelId)?.classList.add("open");
 
     const btnSummary = document.getElementById("btn-ai-summary");
-    const btnChat = document.getElementById("btn-ai-chat");
+    const btnChat = document.querySelector(".ai-chat-toggle") || document.getElementById("btn-ai-chat");
+
+    if (isAlreadyOpen && !forceOpen) {
+        btnSummary?.classList.remove("active-tool");
+        btnChat?.classList.remove("active-tool");
+        return;
+    }
+
+    target?.classList.add("open");
+
     if (panelId === "ai-summary-panel") {
         btnSummary?.classList.add("active-tool");
         btnChat?.classList.remove("active-tool");

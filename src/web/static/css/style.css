@@ -1487,7 +1487,7 @@ input:focus {
     border-color: var(--primary);
 }
 
-/* Centered button boards and summary placeholder */
+/* Centered button boards */
 .ai-card-study > button,
 #btn-ai-summary,
 .ai-chat-toggle {
@@ -1496,11 +1496,6 @@ input:focus {
     justify-content: center !important;
     text-align: center !important;
     gap: 8px !important;
-}
-
-#ai-summary-output.muted-text {
-    text-align: center;
-    padding: 6px 0;
 }
 
 .analysis-panel {
