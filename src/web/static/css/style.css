@@ -4154,7 +4154,7 @@ body.landing-page:not(.upload-mode) {
    ========================================================================== */
 
 .snap-section.library-section {
-    padding: clamp(80px, 9vh, 96px) clamp(20px, 4vw, 56px) clamp(20px, 3vh, 36px);
+    padding: clamp(108px, 12vh, 126px) clamp(20px, 4vw, 56px) clamp(16px, 2vh, 26px);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -4166,14 +4166,21 @@ body.landing-page:not(.upload-mode) {
 .library-section .library-section-header {
     flex: 0 0 auto;
     text-align: center;
-    margin-bottom: clamp(10px, 1.6vh, 18px);
+    margin-bottom: clamp(8px, 1.4vh, 16px);
     max-width: 780px;
 }
 
 .library-section .library-section-header .landing-kicker {
     margin-bottom: 4px;
-    font-size: 0.92rem;
-    letter-spacing: 0.18em;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+
+[data-theme="dark"] .library-section .library-section-header .landing-kicker {
+    color: #67b9cf;
 }
 
 .library-section .library-section-header h2 {
@@ -4226,7 +4233,7 @@ body.landing-page:not(.upload-mode) {
 .library-section .library-card-list .library-list {
     flex: 1;
     min-height: 0;
-    max-height: calc(100vh - 320px);
+    max-height: calc(100vh - 350px);
     overflow-y: auto;
     padding-right: 6px;
     margin-top: 10px;
