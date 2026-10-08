@@ -749,14 +749,6 @@ function initLibrarySelection() {
             event.stopPropagation();
             return;
         }
-
-        const row = event.target.closest("li[data-job-id]");
-        if (row) {
-            const jobId = row.dataset.jobId;
-            if (jobId) {
-                window.location.href = "/transcript/" + encodeURIComponent(jobId);
-            }
-        }
     });
 
     deleteBtn.addEventListener("click", async () => {

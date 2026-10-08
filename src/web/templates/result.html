@@ -246,16 +246,6 @@
             <div id="flashcards-panel" class="analysis-panel">
                 <div id="flashcards-output" class="ai-output muted-text"></div>
             </div>
-
-            <a href="{{ url_for('library_page') }}" class="soft-btn library-link-btn">
-                <i class="fa-solid fa-database"></i> Search all lectures
-            </a>
-        </div>
-
-        <div class="ai-card">
-            <h3><i class="fa-solid fa-bookmark"></i> Notes</h3>
-            <p class="muted-text small-hint">Saved notes by timestamp.</p>
-            <div id="notes-overview" class="notes-overview"></div>
         </div>
         </div>
 
@@ -267,10 +257,10 @@
             <p class="ai-status ok"><i class="fa-solid fa-circle"></i> Ready — {{ ai_model }}</p>
             {% else %}
             <div class="ai-setup-box">
-                <p><strong>AI is off</strong> — create <code>src/web/.env</code> with your API key, then restart the server.</p>
-                <pre class="env-snippet">OPENAI_API_KEY=sk-your-key-here
-LLM_MODEL=gpt-4o-mini</pre>
-                <p class="muted-text small-hint">Free local option: use Ollama — see <code>.env.example</code></p>
+                <p><strong>Gemini AI is off</strong> — add your Gemini API key to <code>src/web/.env</code>, then restart the server.</p>
+                <pre class="env-snippet">GEMINI_API_KEY=your-gemini-api-key-here
+LLM_MODEL=gemini-3.5-flash</pre>
+                <p class="muted-text small-hint">Get a free key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a></p>
             </div>
             {% endif %}
 

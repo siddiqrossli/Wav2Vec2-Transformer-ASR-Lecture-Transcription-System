@@ -11,16 +11,23 @@ import os
 import re
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Load .env from web folder when python-dotenv is installed.
-try:
-    from dotenv import load_dotenv
-    from pathlib import Path
+def _reload_env() -> None:
+    try:
+        from dotenv import load_dotenv
+        env_file = Path(__file__).resolve().parent / ".env"
+        if env_file.is_file():
+            raw = env_file.read_text(encoding="utf-8")
+            if "LLM_API_BASE" not in raw:
+                os.environ.pop("LLM_API_BASE", None)
+            load_dotenv(env_file, override=True)
+    except Exception:
+        pass
 
-    load_dotenv(Path(__file__).resolve().parent / ".env")
-except ImportError:
-    pass
+_reload_env()
 
 
 class AINotConfiguredError(RuntimeError):
@@ -32,20 +39,58 @@ class AIServiceError(RuntimeError):
 
 
 def _api_key() -> str:
+    _reload_env()
     return (
-        os.environ.get("LLM_API_KEY")
+        os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+        or os.environ.get("LLM_API_KEY")
         or os.environ.get("OPENAI_API_KEY")
         or ""
     ).strip()
 
 
-def _api_base() -> str:
-    base = (os.environ.get("LLM_API_BASE") or "https://api.openai.com/v1").strip()
-    return base.rstrip("/")
-
-
 def _model() -> str:
-    return (os.environ.get("LLM_MODEL") or "gpt-4o-mini").strip()
+    _reload_env()
+    m = (os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL") or "").strip()
+    if m:
+        if m in {"gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-pro"}:
+            return "gemini-3.5-flash"
+        return m
+    return "gemini-3.5-flash"
+
+
+def _provider() -> str:
+    _reload_env()
+    prov = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
+    if prov:
+        return prov
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return "gemini"
+    if _model().startswith("gemini"):
+        return "gemini"
+    key = _api_key()
+    if key.startswith("AIzaSy"):
+        return "gemini"
+    base = (os.environ.get("LLM_API_BASE") or "").lower()
+    if "googleapis" in base or "google" in base or "gemini" in base:
+        return "gemini"
+    if "localhost:11434" in base or "127.0.0.1:11434" in base:
+        return "ollama"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return "gemini"
+
+
+def _api_base() -> str:
+    _reload_env()
+    base = os.environ.get("LLM_API_BASE")
+    if base and base.strip():
+        return base.strip().rstrip("/")
+    if _provider() == "gemini":
+        return "https://generativelanguage.googleapis.com/v1beta/openai"
+    if _provider() == "ollama":
+        return "http://localhost:11434/v1"
+    return "https://api.openai.com/v1"
 
 
 def _max_transcript_chars() -> int:
@@ -56,15 +101,32 @@ def _max_transcript_chars() -> int:
 
 
 def is_ai_available() -> bool:
-    """True when an API key is set (use any value for local Ollama)."""
-    return bool(_api_key())
+    """True when an API key is set and not a placeholder."""
+    key = _api_key()
+    if not key:
+        return False
+    placeholders = {
+        "your-gemini-api-key-here",
+        "your_gemini_api_key_here",
+        "your-key-here",
+        "sk-your-key-here",
+        "ollama",
+    }
+    if key.lower() in placeholders:
+        return False
+    return True
 
 
 def ai_status() -> Dict[str, Any]:
     return {
         "available": is_ai_available(),
         "model": _model(),
-        "provider_hint": "Set OPENAI_API_KEY or LLM_API_KEY in .env (see .env.example)",
+        "provider": _provider(),
+        "provider_hint": (
+            f"Ready — {_model()}"
+            if is_ai_available()
+            else "Add GEMINI_API_KEY to src/web/.env (get key at https://aistudio.google.com/apikey)"
+        ),
     }
 
 
@@ -81,52 +143,231 @@ def truncate_transcript(text: str, max_chars: Optional[int] = None) -> str:
     )
 
 
-def _chat_completion(
+def _call_gemini_native(
     messages: List[Dict[str, str]],
     temperature: float = 0.3,
     timeout: int = 120,
+    response_format: Optional[Dict[str, Any]] = None,
+    model: Optional[str] = None,
 ) -> str:
-    if not is_ai_available():
-        raise AINotConfiguredError(
-            "AI features are not configured. Add OPENAI_API_KEY or LLM_API_KEY to src/web/.env"
-        )
+    """
+    Direct call to Google Gemini generateContent REST endpoint.
+    Used as an alternate or fallback for native Gemini requests.
+    """
+    key = _api_key()
+    selected_model = model or _model()
+    if not selected_model.startswith("gemini-") or selected_model in {"gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-pro"}:
+        selected_model = "gemini-3.5-flash"
 
-    url = f"{_api_base()}/chat/completions"
-    payload = {
-        "model": _model(),
-        "messages": messages,
-        "temperature": temperature,
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{selected_model}:generateContent?key={key}"
+
+    system_parts: List[str] = []
+    contents: List[Dict[str, Any]] = []
+
+    for msg in messages:
+        role = msg.get("role", "user")
+        text = msg.get("content", "")
+        if role == "system":
+            system_parts.append(text)
+        elif role == "assistant":
+            contents.append({"role": "model", "parts": [{"text": text}]})
+        else:
+            contents.append({"role": "user", "parts": [{"text": text}]})
+
+    if not contents and system_parts:
+        contents.append({"role": "user", "parts": [{"text": "\n\n".join(system_parts)}]})
+        system_parts = []
+
+    payload: Dict[str, Any] = {
+        "contents": contents,
+        "generationConfig": {
+            "temperature": temperature,
+        },
     }
+    if system_parts:
+        payload["systemInstruction"] = {
+            "parts": [{"text": "\n\n".join(system_parts)}]
+        }
+    if response_format and response_format.get("type") == "json_object":
+        payload["generationConfig"]["responseMimeType"] = "application/json"
 
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=body,
         method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {_api_key()}",
-        },
+        headers={"Content-Type": "application/json"},
     )
 
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        raise AIServiceError(f"LLM API error ({e.code}): {detail[:500]}") from e
+        try:
+            err_json = json.loads(detail)
+            msg = err_json.get("error", {}).get("message", detail[:300])
+        except Exception:
+            msg = detail[:300]
+        if "API_KEY_INVALID" in detail or "valid API key" in msg.lower():
+            raise AIServiceError(
+                "Invalid Gemini API key. Please check GEMINI_API_KEY in src/web/.env."
+            ) from e
+        raise AIServiceError(f"Gemini API error ({e.code}): {msg}") from e
     except urllib.error.URLError as e:
         reason = str(e.reason) if getattr(e, "reason", None) else str(e)
         if "timed out" in reason.lower() or "timeout" in reason.lower():
-            raise AIServiceError(
-                "Request timed out. For long lectures, translation runs in chunks—please try again."
-            ) from e
-        raise AIServiceError(f"Could not reach LLM API at {_api_base()}: {e}") from e
+            raise AIServiceError("Gemini request timed out. Please try again.") from e
+        raise AIServiceError(f"Could not reach Gemini API: {reason}") from e
 
-    try:
-        return (data["choices"][0]["message"]["content"] or "").strip()
-    except (KeyError, IndexError, TypeError) as e:
-        raise AIServiceError(f"Unexpected LLM response: {data!r}") from e
+
+def _chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float = 0.3,
+    timeout: int = 120,
+    response_format: Optional[Dict[str, Any]] = None,
+) -> str:
+    if not is_ai_available():
+        raise AINotConfiguredError(
+            "AI features are not configured. "
+            "Please add GEMINI_API_KEY to src/web/.env (get a free key at https://aistudio.google.com/apikey)"
+        )
+
+    base = _api_base()
+    primary_model = _model()
+    candidate_models = [primary_model]
+    if _provider() == "gemini":
+        for fb in ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]:
+            if fb not in candidate_models:
+                candidate_models.append(fb)
+
+    last_error: Optional[Exception] = None
+
+    for model_name in candidate_models:
+        url = f"{base}/chat/completions"
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if response_format is not None:
+            payload["response_format"] = response_format
+
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {_api_key()}",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return (data["choices"][0]["message"]["content"] or "").strip()
+
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            try:
+                err_json = json.loads(detail)
+                if isinstance(err_json, list) and err_json and "error" in err_json[0]:
+                    msg = err_json[0]["error"].get("message", "")
+                elif isinstance(err_json, dict) and "error" in err_json:
+                    msg = err_json["error"].get("message", "")
+                else:
+                    msg = detail[:300]
+            except Exception:
+                msg = detail[:300]
+
+            if "API key not valid" in msg or "API_KEY_INVALID" in msg or "valid API key" in msg.lower():
+                raise AIServiceError(
+                    "Invalid Gemini API key. Please check GEMINI_API_KEY in src/web/.env "
+                    "(get a free key at https://aistudio.google.com/apikey)."
+                ) from e
+
+            # If 404, 429 or 503, retry with next candidate model
+            if e.code in (404, 429, 503):
+                last_error = AIServiceError(f"AI API error ({e.code}): {msg}")
+                continue
+
+            # Try native endpoint fallback for Gemini
+            if _provider() == "gemini":
+                try:
+                    return _call_gemini_native(
+                        messages,
+                        temperature=temperature,
+                        timeout=timeout,
+                        response_format=response_format,
+                        model=model_name,
+                    )
+                except Exception:
+                    pass
+
+            raise AIServiceError(f"AI API error ({e.code}): {msg}") from e
+
+        except urllib.error.URLError as e:
+            reason = str(e.reason) if getattr(e, "reason", None) else str(e)
+            if "timed out" in reason.lower() or "timeout" in reason.lower():
+                last_error = AIServiceError("Request timed out. Please try again.")
+                continue
+
+            if "10061" in reason or "refused" in reason.lower():
+                raise AIServiceError(
+                    f"Could not connect to LLM service at {base}. "
+                    "If using Google Gemini, set GEMINI_API_KEY in src/web/.env."
+                ) from e
+
+            if _provider() == "gemini":
+                try:
+                    return _call_gemini_native(
+                        messages,
+                        temperature=temperature,
+                        timeout=timeout,
+                        response_format=response_format,
+                        model=model_name,
+                    )
+                except Exception:
+                    pass
+
+            raise AIServiceError(f"Could not reach AI API ({base}): {reason}") from e
+
+        except (KeyError, IndexError, TypeError) as e:
+            if _provider() == "gemini":
+                try:
+                    return _call_gemini_native(
+                        messages,
+                        temperature=temperature,
+                        timeout=timeout,
+                        response_format=response_format,
+                        model=model_name,
+                    )
+                except Exception:
+                    pass
+            raise AIServiceError(f"Unexpected AI response format: {e}") from e
+
+    # If all OpenAI-compatible attempts failed and provider is gemini, try native endpoint
+    if _provider() == "gemini":
+        for native_m in ["gemini-3.5-flash", "gemini-3.1-flash-lite"]:
+            try:
+                return _call_gemini_native(
+                    messages,
+                    temperature=temperature,
+                    timeout=timeout,
+                    response_format=response_format,
+                    model=native_m,
+                )
+            except Exception as e:
+                last_error = e
+                continue
+
+    if last_error:
+        raise last_error
+
+    raise AIServiceError("All candidate AI models failed. Please try again shortly.")
 
 
 def _lecture_context_block(
@@ -229,34 +470,138 @@ def chat_about_transcript(
 
 
 def _parse_json_from_llm(raw: str) -> Any:
+    """
+    Parse JSON returned by an LLM.
+
+    Handles:
+    - Normal JSON
+    - ```json ... ``` code fences
+    - Extra text before/after JSON
+    - Smart quotes
+    - Trailing commas
+    - Python-style single-quoted dictionaries/lists
+    """
+
     raw = (raw or "").strip()
+
+    if not raw:
+        raise AIServiceError("LLM returned an empty response.")
+
+    # ---------------------------------------------------------
+    # 1. Remove Markdown code fences
+    # ---------------------------------------------------------
     if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        lines = raw.splitlines()
+
+        if lines:
+            # Remove opening ```json / ```
+            lines = lines[1:]
+
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+
+        raw = "\n".join(lines).strip()
+
+    # ---------------------------------------------------------
+    # 2. Try normal JSON first
+    # ---------------------------------------------------------
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start >= 0 and end > start:
-            candidate = raw[start : end + 1]
-        else:
-            raise AIServiceError("LLM did not return valid JSON.")
+        pass
 
-    # Repair common JSON mistakes from LLMs.
-    candidate = candidate.replace("“", '"').replace("”", '"').replace("’", "'")
-    candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
-    # Missing commas between string literals:  "a" "b"  -> "a","b"
-    candidate = re.sub(r"\"\s*\"", "\",\"", candidate)
-    # Missing commas between objects/arrays.
-    candidate = re.sub(r"}\s*{", "},{", candidate)
-    candidate = re.sub(r"]\s*\[", "],[", candidate)
-    candidate = re.sub(r"\n+", "\n", candidate).strip()
+    # ---------------------------------------------------------
+    # 3. Extract JSON object from surrounding text
+    # ---------------------------------------------------------
+    start = raw.find("{")
+    end = raw.rfind("}")
 
+    if start >= 0 and end > start:
+        candidate = raw[start:end + 1]
+    else:
+        candidate = raw
+
+    # ---------------------------------------------------------
+    # 4. Normalize common LLM formatting mistakes
+    # ---------------------------------------------------------
+    candidate = (
+        candidate
+        .replace("\ufeff", "")
+        .replace("“", '"')
+        .replace("”", '"')
+        .replace("„", '"')
+        .replace("’", "'")
+    )
+
+    # Remove trailing commas:
+    # {"a": 1,} -> {"a": 1}
+    # [1, 2,]   -> [1, 2]
+    candidate = re.sub(
+        r",\s*([}\]])",
+        r"\1",
+        candidate,
+    )
+
+    # Fix missing commas between objects:
+    # } { -> }, {
+    candidate = re.sub(
+        r"}\s*{",
+        "},{",
+        candidate,
+    )
+
+    # Fix missing commas between arrays:
+    # ] [ -> ], [
+    candidate = re.sub(
+        r"]\s*\[",
+        "],[",
+        candidate,
+    )
+
+    candidate = candidate.strip()
+
+    # ---------------------------------------------------------
+    # 5. Try JSON again after repairs
+    # ---------------------------------------------------------
     try:
         return json.loads(candidate)
+
+    except json.JSONDecodeError:
+        pass
+
+    # ---------------------------------------------------------
+    # 6. Last fallback:
+    #    Llama models sometimes return Python-style dictionaries
+    #    using single quotes.
+    #
+    #    ast.literal_eval is safe for Python literals and does
+    #    not execute arbitrary code.
+    # ---------------------------------------------------------
+    try:
+        import ast
+
+        parsed = ast.literal_eval(candidate)
+
+        if isinstance(parsed, (dict, list)):
+            return parsed
+
+    except (ValueError, SyntaxError, TypeError):
+        pass
+
+    # ---------------------------------------------------------
+    # 7. Give a useful error
+    # ---------------------------------------------------------
+    try:
+        json.loads(candidate)
     except json.JSONDecodeError as e:
-        raise AIServiceError(f"LLM JSON parse failed: {e}") from e
+        preview = candidate[:500].replace("\n", "\\n")
+
+        raise AIServiceError(
+            f"LLM JSON parse failed: {e}. "
+            f"Response preview: {preview}"
+        ) from e
+
+    raise AIServiceError("LLM returned an unsupported JSON format.")
 
 
 def generate_quiz(
@@ -333,21 +678,102 @@ def generate_glossary(
     speaker: str = "",
     course: str = "",
 ) -> Dict[str, Any]:
-    context = _lecture_context_block(transcript, title, speaker, course)
+
+    context = _lecture_context_block(
+        transcript,
+        title,
+        speaker,
+        course,
+    )
+
     messages = [
         {
             "role": "system",
             "content": (
-                "Extract important technical terms from the lecture and define them clearly. "
-                'Return ONLY JSON: {"terms":[{"term":"...","definition":"..."}]}'
+                "You are an academic lecture assistant.\n\n"
+
+                "Extract the most important technical terms "
+                "from the lecture transcript.\n\n"
+
+                "For every term, provide a clear and concise "
+                "definition based ONLY on the lecture transcript.\n\n"
+
+                "Return ONLY valid JSON.\n\n"
+
+                'The exact required structure is:\n'
+                '{"terms":[{"term":"example","definition":"example definition"}]}\n\n'
+
+                "Rules:\n"
+                f"- Return no more than {max_terms} terms.\n"
+                "- Every item must contain exactly a term and definition.\n"
+                "- Use double quotes for JSON strings.\n"
+                "- Do not use Markdown.\n"
+                "- Do not use ```json.\n"
+                "- Do not add explanations before or after the JSON.\n"
             ),
         },
-        {"role": "user", "content": f"Up to {max_terms} terms:\n\n{context}"},
+        {
+            "role": "user",
+            "content": (
+                f"Extract up to {max_terms} important technical terms "
+                f"from this lecture:\n\n{context}"
+            ),
+        },
     ]
-    data = _parse_json_from_llm(_chat_completion(messages, temperature=0.25))
-    if not isinstance(data, dict) or "terms" not in data:
-        raise AIServiceError("Invalid glossary JSON from LLM.")
-    return data
+
+    raw = _chat_completion(
+        messages,
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+
+    data = _parse_json_from_llm(raw)
+
+    # ---------------------------------------------------------
+    # Validate top-level structure
+    # ---------------------------------------------------------
+    if not isinstance(data, dict):
+        raise AIServiceError(
+            "Invalid glossary response: expected a JSON object."
+        )
+
+    terms = data.get("terms")
+
+    if not isinstance(terms, list):
+        raise AIServiceError(
+            "Invalid glossary response: 'terms' must be a list."
+        )
+
+    # ---------------------------------------------------------
+    # Clean and validate individual terms
+    # ---------------------------------------------------------
+    cleaned_terms: List[Dict[str, str]] = []
+
+    for item in terms:
+        if not isinstance(item, dict):
+            continue
+
+        term = str(item.get("term", "")).strip()
+        definition = str(item.get("definition", "")).strip()
+
+        if not term or not definition:
+            continue
+
+        cleaned_terms.append(
+            {
+                "term": term,
+                "definition": definition,
+            }
+        )
+
+    if not cleaned_terms:
+        raise AIServiceError(
+            "The LLM returned no valid glossary terms."
+        )
+
+    return {
+        "terms": cleaned_terms[:max_terms]
+    }
 
 
 def generate_flashcards(
@@ -357,22 +783,91 @@ def generate_flashcards(
     speaker: str = "",
     course: str = "",
 ) -> Dict[str, Any]:
-    context = _lecture_context_block(transcript, title, speaker, course)
+
+    context = _lecture_context_block(
+        transcript,
+        title,
+        speaker,
+        course,
+    )
+
     messages = [
         {
             "role": "system",
             "content": (
-                "Create study flashcards from the lecture. "
-                'Return ONLY JSON: {"cards":[{"front":"...","back":"..."}]}'
+                "You are an academic lecture assistant.\n\n"
+                "Create study flashcards from the lecture transcript.\n"
+                "Use ONLY information from the transcript.\n\n"
+
+                "Return ONLY valid JSON.\n\n"
+
+                'The exact required structure is:\n'
+                '{"cards":[{"front":"question or term","back":"answer or explanation"}]}\n\n'
+
+                "Rules:\n"
+                f"- Create no more than {count} cards.\n"
+                "- Every card must contain front and back.\n"
+                "- Use double quotes for JSON strings.\n"
+                "- Do not use Markdown.\n"
+                "- Do not use ```json.\n"
+                "- Do not add explanations before or after the JSON.\n"
             ),
         },
-        {"role": "user", "content": f"Create {count} flashcards:\n\n{context}"},
+        {
+            "role": "user",
+            "content": (
+                f"Create {count} study flashcards:\n\n{context}"
+            ),
+        },
     ]
-    data = _parse_json_from_llm(_chat_completion(messages, temperature=0.35))
-    if not isinstance(data, dict) or "cards" not in data:
-        raise AIServiceError("Invalid flashcards JSON from LLM.")
-    return data
 
+    raw = _chat_completion(
+        messages,
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
+
+    data = _parse_json_from_llm(raw)
+
+    if not isinstance(data, dict):
+        raise AIServiceError(
+            "Invalid flashcards response: expected a JSON object."
+        )
+
+    cards = data.get("cards")
+
+    if not isinstance(cards, list):
+        raise AIServiceError(
+            "Invalid flashcards response: 'cards' must be a list."
+        )
+
+    cleaned_cards: List[Dict[str, str]] = []
+
+    for item in cards:
+        if not isinstance(item, dict):
+            continue
+
+        front = str(item.get("front", "")).strip()
+        back = str(item.get("back", "")).strip()
+
+        if not front or not back:
+            continue
+
+        cleaned_cards.append(
+            {
+                "front": front,
+                "back": back,
+            }
+        )
+
+    if not cleaned_cards:
+        raise AIServiceError(
+            "The LLM returned no valid flashcards."
+        )
+
+    return {
+        "cards": cleaned_cards[:count]
+    }
 
 def _split_text_chunks(text: str, max_chars: int = 2800) -> List[str]:
     text = (text or "").strip()

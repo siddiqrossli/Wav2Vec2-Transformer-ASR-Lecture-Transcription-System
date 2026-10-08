@@ -22,7 +22,12 @@ class WebConfig:
     }
 
     # Model path
-    MODEL_PATH = r"E:\final year project\model_100k_clean_v2_1k_lm"
+    _DEFAULT_MODEL_PATH = (
+        r"D:\final year project\model_100k_clean_v2_1k_lm"
+        if os.path.exists(r"D:\final year project\model_100k_clean_v2_1k_lm")
+        else r"E:\final year project\model_100k_clean_v2_1k_lm"
+    )
+    MODEL_PATH = os.environ.get("ASR_MODEL_PATH") or _DEFAULT_MODEL_PATH
 
     # Audio settings
     TARGET_SR = 16000

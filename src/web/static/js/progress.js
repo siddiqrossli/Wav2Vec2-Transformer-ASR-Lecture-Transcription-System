@@ -98,8 +98,18 @@ function estimateTranscribeMs(durationSeconds) {
 
 /** Open one panel in the AI sidebar (summary vs chat). */
 function openAiPanel(panelId) {
-    const root = document.getElementById("side-panel-ai");
+    const root = document.getElementById("card-ai-assistant") || document.getElementById("side-panel-ai");
     if (!root) return;
     root.querySelectorAll(".ai-switch-panel").forEach((p) => p.classList.remove("open"));
     document.getElementById(panelId)?.classList.add("open");
+
+    const btnSummary = document.getElementById("btn-ai-summary");
+    const btnChat = document.getElementById("btn-ai-chat");
+    if (panelId === "ai-summary-panel") {
+        btnSummary?.classList.add("active-tool");
+        btnChat?.classList.remove("active-tool");
+    } else if (panelId === "ai-chat-panel") {
+        btnChat?.classList.add("active-tool");
+        btnSummary?.classList.remove("active-tool");
+    }
 }

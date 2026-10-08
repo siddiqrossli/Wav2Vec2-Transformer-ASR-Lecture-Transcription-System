@@ -389,7 +389,11 @@ def uploaded_file(filename):
 @app.get("/")
 def index():
     cleanup_old_uploads()
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        lectures=list_transcripts(),
+        ai_available=is_ai_available(),
+    )
 
 
 @app.post("/transcribe")
@@ -498,13 +502,7 @@ def transcribe():
 
         cleanup_old_uploads()
         flash("Transcription completed successfully.", "success")
-        status = ai_status()
-        return render_template(
-            "result.html",
-            transcript=transcript,
-            ai_available=status["available"],
-            ai_model=status.get("model", ""),
-        )
+        return redirect(url_for("view_transcript", job_id=job_id))
 
     except Exception as e:
             traceback.print_exc()
@@ -720,11 +718,7 @@ def api_rag_ask():
 
 @app.get("/library")
 def library_page():
-    return render_template(
-        "library.html",
-        lectures=list_transcripts(),
-        ai_available=is_ai_available(),
-    )
+    return redirect(url_for("index") + "#library")
 
 
 @app.get("/transcript/<job_id>")

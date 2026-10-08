@@ -39,7 +39,7 @@
                 <nav class="landing-links" aria-label="Landing navigation">
                     <a href="{{ url_for('index') }}#home">Home</a>
                     <a href="{{ url_for('index') }}#how">How It Works</a>
-                    <a href="{{ url_for('library_page') }}" class="{% if request.endpoint == 'library_page' %}active{% endif %}">Library</a>
+                    <a href="{{ url_for('index') }}#library">Library</a>
                 </nav>
 
                 <button type="button" class="theme-toggle landing-theme" onclick="toggleTheme()" title="Toggle theme">
@@ -197,7 +197,7 @@
             <nav class="landing-links" aria-label="Landing navigation">
                 <a href="#home" class="active">Home</a>
                 <a href="#how">How It Works</a>
-                <a href="{{ url_for('library_page') }}" class="{% if request.endpoint == 'library_page' %}active{% endif %}">Library</a>
+                <a href="#library">Library</a>
             </nav>
 
             <button type="button" class="theme-toggle landing-theme" onclick="toggleTheme()" title="Toggle theme">
@@ -320,6 +320,73 @@
                     </article>
                 </div>
             </section>
+
+            <section id="library" class="snap-section library-section">
+                <div class="library-section-header">
+                    <p class="landing-kicker">Saved Transcripts &amp; RAG</p>
+                    <h2>Lecture Library</h2>
+                    <p>Search key concepts across all lectures, review timestamped notes, or ask questions grounded in your saved content.</p>
+                </div>
+
+                <div class="library-layout">
+                    <section class="library-card library-card-list" id="library-card-list">
+                        <div class="library-list-head">
+                            <h2><i class="fa-solid fa-database"></i> Saved lectures</h2>
+                            <button type="button" class="soft-btn library-select-toggle" id="library-select-toggle">Select</button>
+                        </div>
+                        <div class="library-selection-actions" id="library-selection-actions" style="display:none;">
+                            <button type="button" class="soft-btn" id="library-select-all-btn">Select all</button>
+                            <button type="button" class="soft-btn" id="library-cancel-select-btn">Cancel</button>
+                            <button type="button" class="soft-btn library-delete-btn" id="library-delete-selected-btn">Delete</button>
+                        </div>
+                        <p class="muted-text">Transcripts are indexed for cross-lecture search (RAG).</p>
+
+                        {% if lectures %}
+                        <ul class="library-list" id="library-list">
+                            {% for lec in lectures %}
+                            <li data-job-id="{{ lec.job_id }}">
+                                <div class="library-row-select">
+                                    <input type="checkbox" class="library-select-checkbox" aria-label="Select lecture">
+                                </div>
+                                <div class="library-row-content">
+                                    <strong>{{ lec.title }}</strong>
+                                    <span>{{ lec.course_code or '' }} · {{ lec.duration or '' }} · {{ lec.processed_at or '' }}</span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="muted-text">No saved lectures yet. <a href="{{ url_for('index') }}?upload=1" style="color:var(--primary); text-decoration:underline;">Upload and transcribe</a> to build your library.</p>
+                        {% endif %}
+                    </section>
+
+                    <div class="library-side">
+                        <section class="library-card library-search">
+                            <h2><i class="fa-solid fa-magnifying-glass"></i> Search all lectures</h2>
+                            <div class="library-search-row library-search-form">
+                                <input type="text" id="rag-search-input" placeholder="Search keywords across saved transcripts…">
+                                <button type="button" class="primary-btn compact" onclick="runRagSearch()">Search</button>
+                            </div>
+                            <div id="rag-search-results" class="rag-results"></div>
+                        </section>
+
+                        <section class="library-card">
+                            <h2><i class="fa-solid fa-comments"></i> Ask across lectures</h2>
+                            {% if ai_available %}
+                            <p class="ai-status ok"><i class="fa-solid fa-circle"></i> Uses AI + retrieved excerpts</p>
+                            {% else %}
+                            <p class="ai-status warn">Configure <code>OPENAI_API_KEY</code> in <code>.env</code> for AI answers.</p>
+                            {% endif %}
+                            <textarea id="rag-ask-input" rows="3" placeholder="e.g., What did we cover about gradient descent?" {% if not ai_available %}disabled{% endif %}></textarea>
+                            <button type="button" id="ask-library-btn" class="primary-btn compact" onclick="runRagAsk()" {% if not ai_available %}disabled{% endif %}>
+                                Ask library
+                            </button>
+                            <div id="rag-ask-answer" class="rag-answer muted-text">Answers cite matching lecture excerpts.</div>
+                            <div id="rag-ask-sources" class="rag-results"></div>
+                        </section>
+                    </div>
+                </div>
+            </section>
         </main>
     {% endif %}
 
@@ -354,6 +421,17 @@
 
             scroller.addEventListener("wheel", function (event) {
                 if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+
+                // Allow inner scrollable elements (like .library-list or .library-side) to scroll vertically
+                var scrollableChild = event.target.closest(".library-list, .library-side, .rag-results, textarea");
+                if (scrollableChild) {
+                    var canScrollDown = scrollableChild.scrollTop + scrollableChild.clientHeight < scrollableChild.scrollHeight - 4;
+                    var canScrollUp = scrollableChild.scrollTop > 4;
+                    if ((event.deltaY > 0 && canScrollDown) || (event.deltaY < 0 && canScrollUp)) {
+                        return; // Let the inner element scroll naturally
+                    }
+                }
+
                 event.preventDefault();
                 if (wheelLocked) return;
 
@@ -387,13 +465,17 @@
                 if (initialTarget) {
                     window.setTimeout(function () {
                         goToSection(sections.indexOf(initialTarget));
-                    }, 0);
+                    }, 100);
                 }
             }
             setActive();
         })();
     </script>
+    <script>
+        window.aiAvailable = {{ (ai_available | default(false)) | tojson }};
+    </script>
     <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/features.js') }}"></script>
 </body>
 </html>

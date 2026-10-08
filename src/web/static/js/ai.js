@@ -149,9 +149,15 @@ function initAiChat() {
     });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function initAiOnReady() {
     initAiChat();
     if (document.getElementById("side-panel-ai")) {
         openAiPanel("ai-summary-panel");
     }
-});
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAiOnReady);
+} else {
+    initAiOnReady();
+}

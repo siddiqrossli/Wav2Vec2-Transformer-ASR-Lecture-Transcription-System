@@ -225,6 +225,11 @@ async function submitTranscription(event) {
             if (processSim) clearInterval(processSim);
             if (xhr.status >= 200 && xhr.status < 300) {
                 updateTranscribeProgress("Finishing", 98);
+                if (xhr.responseURL && (xhr.responseURL.includes("/transcript/") || xhr.responseURL !== window.location.href)) {
+                    window.location.href = xhr.responseURL;
+                    resolve();
+                    return;
+                }
                 setTimeout(() => {
                     document.open();
                     document.write(xhr.responseText);

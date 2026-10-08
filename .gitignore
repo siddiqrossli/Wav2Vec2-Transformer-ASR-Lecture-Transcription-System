@@ -1,0 +1,55 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+venv_gpu/
+env/
+
+# Environment files and secrets (NEVER commit API keys)
+.env
+.env.*
+!.env.example
+*.env
+
+# Archives & large binaries
+*.rar
+*.zip
+*.tar.gz
+*.7z
+
+# Logs and results
+*.log
+results.txt
+results_clean.txt
+
+# Large model/checkpoint files
+models/
+checkpoints/
+model_*/
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.onnx
+
+# Uploads / runtime transcript data
+src/web/uploads/*
+!src/web/uploads/.gitkeep
+src/web/data/transcripts/*
+!src/web/data/transcripts/.gitkeep
+data/input/*
+!data/input/.gitkeep
+data/output/*
+!data/output/.gitkeep
+runs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
