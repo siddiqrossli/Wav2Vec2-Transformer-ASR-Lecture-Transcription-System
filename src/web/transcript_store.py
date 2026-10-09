@@ -36,7 +36,21 @@ def load_transcript(job_id: str) -> Optional[Dict[str, Any]]:
     path = _transcript_path(job_id)
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return None
+
+    # Autodetect media_type for legacy transcript records
+    if "media_type" not in data:
+        audio_url = data.get("audio_url") or ""
+        ext = Path(audio_url).suffix.lower()
+        if ext in {".mp4", ".mov", ".avi", ".mkv", ".webm"}:
+            data["media_type"] = "video"
+            data["video_url"] = audio_url
+        else:
+            data["media_type"] = "audio"
+            data["video_url"] = None
+    return data
 
 
 def list_transcripts() -> List[Dict[str, Any]]:
@@ -55,6 +69,7 @@ def list_transcripts() -> List[Dict[str, Any]]:
                     "duration": data.get("duration"),
                     "processed_at": data.get("processed_at"),
                     "word_count": data.get("word_count"),
+                    "media_type": data.get("media_type") or "audio",
                 }
             )
         except (json.JSONDecodeError, OSError):

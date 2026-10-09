@@ -1367,8 +1367,176 @@ input:focus {
     box-sizing: border-box;
 }
 
-.audio-card audio {
+.audio-card audio,
+.lecture-audio-player {
     width: 100%;
+    border-radius: 10px;
+    outline: none;
+}
+
+.playback-media-screen {
+    width: 100%;
+    margin-bottom: 6px;
+}
+
+.video-screen {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--border);
+}
+
+.lecture-video-player {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    background: #000;
+    display: block;
+    border-radius: 11px;
+    outline: none;
+}
+
+.audio-screen {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.audio-artwork-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #f0f7f9 0%, #e2eff3 100%);
+    border: 1px solid rgba(37, 109, 133, 0.2);
+    box-shadow: 0 2px 10px rgba(37, 109, 133, 0.08);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.25s ease;
+}
+
+[data-theme="dark"] .audio-artwork-card {
+    background: linear-gradient(135deg, #162235 0%, #0d1522 100%);
+    border-color: rgba(103, 185, 207, 0.25);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.audio-artwork-card.is-playing {
+    border-color: var(--primary);
+    box-shadow: 0 4px 16px rgba(37, 109, 133, 0.18);
+}
+
+[data-theme="dark"] .audio-artwork-card.is-playing {
+    border-color: #67b9cf;
+    box-shadow: 0 4px 18px rgba(103, 185, 207, 0.2);
+}
+
+.audio-artwork-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.audio-artwork-badge {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    box-shadow: 0 2px 8px rgba(37, 109, 133, 0.3);
+}
+
+[data-theme="dark"] .audio-artwork-badge {
+    background: #256d85;
+}
+
+.audio-artwork-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    z-index: 1;
+}
+
+.audio-artwork-title {
+    font-weight: 700;
+    font-size: 0.96rem;
+    color: var(--text);
+    line-height: 1.35;
+    max-width: 100%;
+    word-break: break-word;
+}
+
+.audio-artwork-sub {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.audio-wave-equalizer {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 24px;
+    padding: 2px 4px;
+}
+
+.audio-wave-equalizer .wave-bar {
+    width: 4px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--primary);
+    opacity: 0.45;
+    transition: height 0.2s ease, opacity 0.2s ease;
+}
+
+[data-theme="dark"] .audio-wave-equalizer .wave-bar {
+    background: #67b9cf;
+}
+
+.audio-artwork-card.is-playing .audio-wave-equalizer .wave-bar {
+    opacity: 1;
+    animation: waveBounce 1.1s ease-in-out infinite alternate;
+}
+
+.audio-artwork-card.is-playing .audio-wave-equalizer .wave-bar:nth-child(1) {
+    animation-delay: 0.1s;
+    animation-duration: 0.85s;
+}
+
+.audio-artwork-card.is-playing .audio-wave-equalizer .wave-bar:nth-child(2) {
+    animation-delay: 0.3s;
+    animation-duration: 1.15s;
+}
+
+.audio-artwork-card.is-playing .audio-wave-equalizer .wave-bar:nth-child(3) {
+    animation-delay: 0.15s;
+    animation-duration: 0.75s;
+}
+
+.audio-artwork-card.is-playing .audio-wave-equalizer .wave-bar:nth-child(4) {
+    animation-delay: 0.4s;
+    animation-duration: 1.05s;
+}
+
+.audio-artwork-card.is-playing .audio-wave-equalizer .wave-bar:nth-child(5) {
+    animation-delay: 0.25s;
+    animation-duration: 0.95s;
+}
+
+@keyframes waveBounce {
+    0% {
+        height: 6px;
+    }
+    100% {
+        height: 22px;
+    }
 }
 
 .audio-progress-row {

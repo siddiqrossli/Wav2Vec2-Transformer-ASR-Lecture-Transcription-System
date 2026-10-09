@@ -175,18 +175,53 @@
 
         <div class="side-panels-scroll">
         <div id="side-panel-overview" class="side-panel active">
-        <div class="audio-card">
+        <div class="audio-card media-playback-card">
             <div class="card-header-row">
-                <h3><i class="fa-solid fa-volume-high"></i> Playback</h3>
+                <h3>
+                    <i class="fa-solid {% if transcript.media_type == 'video' %}fa-video{% else %}fa-volume-high{% endif %}"></i> Playback
+                </h3>
                 <button type="button" class="btn-card-expand" onclick="toggleSidePanelExpand(this)" title="Expand panel" aria-label="Expand panel">
                     <i class="fa-solid fa-expand"></i>
                 </button>
             </div>
 
-            <audio id="audioPlayer" controls>
-                <source src="{{ transcript.audio_url }}">
-                Your browser does not support audio playback.
-            </audio>
+            {% if transcript.media_type == 'video' and transcript.video_url %}
+            <!-- Video Mode: Video player above playback progress like YouTube -->
+            <div class="playback-media-screen video-screen">
+                <video id="audioPlayer" class="lecture-video-player" controls playsinline preload="metadata">
+                    <source src="{{ transcript.video_url }}">
+                    Your browser does not support video playback.
+                </video>
+            </div>
+            {% else %}
+            <!-- Audio Mode: Audio artwork/image above playback progress -->
+            <div class="playback-media-screen audio-screen">
+                <div class="audio-artwork-card">
+                    <div class="audio-artwork-header">
+                        <div class="audio-artwork-badge">
+                            <i class="fa-solid fa-headphones-simple"></i>
+                        </div>
+                        <div class="audio-wave-equalizer" aria-hidden="true">
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                        </div>
+                    </div>
+                    <div class="audio-artwork-info">
+                        <span class="audio-artwork-title">{{ transcript.title or 'Lecture Audio' }}</span>
+                        <span class="audio-artwork-sub">
+                            {% if transcript.speaker %}{{ transcript.speaker }} • {% endif %}{{ transcript.duration }}
+                        </span>
+                    </div>
+                </div>
+                <audio id="audioPlayer" class="lecture-audio-player" controls preload="metadata">
+                    <source src="{{ transcript.audio_url }}">
+                    Your browser does not support audio playback.
+                </audio>
+            </div>
+            {% endif %}
         </div>
 
         <div class="stats-card">

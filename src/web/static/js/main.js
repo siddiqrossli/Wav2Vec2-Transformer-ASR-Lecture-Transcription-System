@@ -431,6 +431,18 @@ if (audio) {
 
         highlightActiveSegment(audio.currentTime);
     });
+
+    audio.addEventListener("play", function () {
+        document.querySelector(".audio-artwork-card")?.classList.add("is-playing");
+    });
+
+    audio.addEventListener("pause", function () {
+        document.querySelector(".audio-artwork-card")?.classList.remove("is-playing");
+    });
+
+    audio.addEventListener("ended", function () {
+        document.querySelector(".audio-artwork-card")?.classList.remove("is-playing");
+    });
 }
 
 function formatTime(seconds) {

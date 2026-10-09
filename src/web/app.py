@@ -92,6 +92,48 @@ def convert_media_to_wav(input_path: Path, output_path: Path) -> Path:
     return output_path
 
 
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}
+
+
+def is_video_file(filename: str) -> bool:
+    return Path(filename).suffix.lower() in VIDEO_EXTENSIONS
+
+
+def ensure_web_compatible_video(input_path: Path, output_path: Path) -> Path:
+    """
+    Ensure video is in a browser-streamable MP4 format.
+    If already MP4/WebM, returns input_path. Otherwise remuxes/transcodes to H.264/AAC MP4.
+    """
+    ext = input_path.suffix.lower()
+    if ext in {".mp4", ".webm"}:
+        return input_path
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", str(input_path),
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "24",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        str(output_path),
+    ]
+    result = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"[WARN] Video conversion warning: {result.stderr}, falling back to original input")
+        return input_path
+
+    return output_path
+
+
 def _allowed_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in WebConfig.ALLOWED_EXTENSIONS
 
@@ -427,6 +469,14 @@ def transcribe():
         in_path = upload_dir / f"{job_id}_{Path(f.filename).name}"
         f.save(str(in_path))
 
+        is_video = is_video_file(in_path.name)
+        video_file_url = None
+
+        if is_video:
+            playback_video_path = upload_dir / f"{job_id}_playback.mp4"
+            video_path = ensure_web_compatible_video(in_path, playback_video_path)
+            video_file_url = url_for("uploaded_file", filename=video_path.name)
+
         wav_path = upload_dir / f"{job_id}_converted.wav"
 
         if in_path.suffix.lower() == ".wav":
@@ -491,6 +541,8 @@ def transcribe():
             "duration": _duration_str(duration_s),
             "processed_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "audio_url": audio_file_url,
+            "media_type": "video" if is_video else "audio",
+            "video_url": video_file_url,
             "word_count": wc,
             "reading_time": reading_time_label(wc, wpm=WebConfig.READING_WPM),
             "keywords": keywords,
