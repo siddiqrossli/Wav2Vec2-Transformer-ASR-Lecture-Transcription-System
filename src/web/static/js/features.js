@@ -130,6 +130,7 @@ function buildQuizView() {
     const fb = isAnswered
         ? `<div class="quiz-feedback">
             <p class="${selected === correct ? "quiz-result-ok" : "quiz-result-no"}">
+                <i class="fa-solid ${selected === correct ? "fa-circle-check" : "fa-circle-xmark"}"></i>
                 ${selected === correct ? "Correct!" : `Incorrect. The answer is ${correct}.`}
             </p>
             <p class="muted-text">${escapeHtml(q.explanation || "")}</p>

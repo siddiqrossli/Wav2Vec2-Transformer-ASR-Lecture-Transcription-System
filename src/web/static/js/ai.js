@@ -93,14 +93,21 @@ async function sendAiChat() {
 
     if (btn) btn.disabled = true;
 
-    let chatSim = null;
     const typing = document.createElement("div");
     typing.className = "chat-msg chat-msg-assistant chat-typing";
-    typing.innerHTML = `<span class="chat-msg-label">Assistant</span><div class="chat-msg-body" id="chat-progress-slot"></div>`;
+    typing.innerHTML = `
+        <span class="chat-msg-label">Assistant</span>
+        <div class="chat-msg-body">
+            <div class="chat-typing-bubble" aria-label="Assistant is typing">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+            </div>
+        </div>
+    `;
     const log = document.getElementById("ai-chat-log");
     log?.appendChild(typing);
-    const progressSlot = document.getElementById("chat-progress-slot");
-    chatSim = startSimulatedProgress(progressSlot, "Thinking", { maxPercent: 90 });
+    if (log) log.scrollTop = log.scrollHeight;
 
     try {
         const payload = {
@@ -111,12 +118,10 @@ async function sendAiChat() {
         const data = await fetchAi("/api/ai/chat", payload);
         const answer = data.answer || "";
 
-        chatSim.stop();
         typing.remove();
         appendChatMessage("assistant", answer);
         aiChatHistory.push({ role: "assistant", content: answer });
     } catch (err) {
-        chatSim?.stop();
         typing.remove();
         appendChatMessage("assistant", err.message || "Sorry, something went wrong.");
     } finally {
