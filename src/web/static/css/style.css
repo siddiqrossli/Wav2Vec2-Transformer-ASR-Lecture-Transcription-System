@@ -1435,7 +1435,7 @@ input:focus {
     color: var(--text);
 }
 
-.ai-card .btn-card-expand {
+.btn-card-expand {
     width: 32px !important;
     max-width: 32px !important;
     height: 32px !important;
@@ -1458,7 +1458,7 @@ input:focus {
     transition: all 0.18s ease;
 }
 
-.ai-card .btn-card-expand:hover {
+.btn-card-expand:hover {
     color: var(--primary) !important;
     border-color: var(--primary) !important;
     background: #eef6f8 !important;
@@ -2520,13 +2520,13 @@ mark.search-hit,
     border-color: var(--primary);
 }
 
-[data-theme="dark"] .ai-card .btn-card-expand {
+[data-theme="dark"] .btn-card-expand {
     background: #0f172a !important;
     color: var(--muted) !important;
     border-color: var(--border) !important;
 }
 
-[data-theme="dark"] .ai-card .btn-card-expand:hover {
+[data-theme="dark"] .btn-card-expand:hover {
     color: var(--primary) !important;
     border-color: var(--primary) !important;
     background: rgba(37, 99, 235, 0.12) !important;

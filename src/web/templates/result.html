@@ -176,7 +176,12 @@
         <div class="side-panels-scroll">
         <div id="side-panel-overview" class="side-panel active">
         <div class="audio-card">
-            <h3><i class="fa-solid fa-volume-high"></i> Playback</h3>
+            <div class="card-header-row">
+                <h3><i class="fa-solid fa-volume-high"></i> Playback</h3>
+                <button type="button" class="btn-card-expand" onclick="toggleSidePanelExpand(this)" title="Expand panel" aria-label="Expand panel">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+            </div>
 
             <audio id="audioPlayer" controls>
                 <source src="{{ transcript.audio_url }}">
@@ -231,21 +236,21 @@
                 </button>
             </div>
 
-            <button type="button" onclick="generateQuiz()" {% if not ai_available %}disabled{% endif %}>
+            <button type="button" id="btn-study-quiz" onclick="toggleQuiz()" {% if not ai_available %}disabled{% endif %}>
                 <i class="fa-solid fa-circle-question"></i> Study quiz
             </button>
             <div id="quiz-panel" class="analysis-panel">
                 <div id="quiz-output" class="ai-output muted-text">MCQs from this lecture.</div>
             </div>
 
-            <button type="button" onclick="generateGlossary()" {% if not ai_available %}disabled{% endif %}>
+            <button type="button" id="btn-study-glossary" onclick="toggleGlossary()" {% if not ai_available %}disabled{% endif %}>
                 <i class="fa-solid fa-book"></i> Glossary
             </button>
             <div id="glossary-panel" class="analysis-panel">
                 <div id="glossary-output" class="ai-output muted-text"></div>
             </div>
 
-            <button type="button" onclick="generateFlashcards()" {% if not ai_available %}disabled{% endif %}>
+            <button type="button" id="btn-study-flashcards" onclick="toggleFlashcards()" {% if not ai_available %}disabled{% endif %}>
                 <i class="fa-solid fa-layer-group"></i> Flashcards
             </button>
             <div id="flashcards-panel" class="analysis-panel">

@@ -51,30 +51,11 @@ async function postJson(url, body, timeoutMs = 180000) {
     }
 }
 
-const AI_TOOL_LABELS = {
-    "/api/ai/quiz": "Generating quiz",
-    "/api/ai/glossary": "Generating glossary",
-    "/api/ai/flashcards": "Generating flashcards",
+window.studyToolsState = {
+    quiz: { isGenerating: false },
+    glossary: { isGenerating: false, html: "" },
+    flashcards: { isGenerating: false },
 };
-
-async function runAiTool(endpoint, panelId, outputId, renderFn, extra = {}) {
-    const panel = document.getElementById(panelId);
-    const el = document.getElementById(outputId);
-    if (panel) panel.classList.add("open");
-
-    const label = AI_TOOL_LABELS[endpoint] || "Generating";
-
-    try {
-        const data = await runWithProgress(el, label, () =>
-            postJson(endpoint, { ...getStudyPayload(), ...extra })
-        );
-        if (el) el.innerHTML = renderFn(data);
-        showToast("Done.");
-    } catch (err) {
-        if (el) el.innerHTML = `<p class="muted-text">${escapeHtml(err.message)}</p>`;
-        showToast("Request failed.");
-    }
-}
 
 function parseQuizOption(opt, index) {
     const letters = ["A", "B", "C", "D"];
@@ -147,6 +128,7 @@ function buildQuizView() {
         ${fb}
         <div class="study-nav">
           <button type="button" class="chat-clear-btn" onclick="prevQuizQuestion()" ${index === 0 ? "disabled" : ""}>Previous</button>
+          <button type="button" class="chat-clear-btn" onclick="generateQuiz(true)" title="Generate new quiz questions"><i class="fa-solid fa-arrows-rotate"></i> New</button>
           <button type="button" class="chat-send-btn" onclick="nextQuizQuestion()" ${index === questions.length - 1 ? "disabled" : ""}>Next</button>
         </div>
       </div>`;
@@ -182,7 +164,7 @@ function prevQuizQuestion() {
 function renderGlossary(data) {
     const terms = data.terms || [];
     if (!terms.length) return "<p class='muted-text'>No terms found.</p>";
-    return terms
+    const items = terms
         .map(
             t => `
         <div class="study-item">
@@ -191,6 +173,8 @@ function renderGlossary(data) {
         </div>`
         )
         .join("");
+    const regen = `<div style="margin-top: 14px; text-align: right;"><button type="button" class="chat-clear-btn" onclick="generateGlossary(true)" title="Regenerate glossary"><i class="fa-solid fa-arrows-rotate"></i> Regenerate</button></div>`;
+    return items + regen;
 }
 
 function renderFlashcards(data) {
@@ -220,6 +204,7 @@ function buildFlashcardView() {
         </div>
         <div class="study-nav">
           <button type="button" class="chat-clear-btn" onclick="prevFlashcard()" ${st.index === 0 ? "disabled" : ""}>Previous</button>
+          <button type="button" class="chat-clear-btn" onclick="generateFlashcards(true)" title="Generate new flashcards"><i class="fa-solid fa-arrows-rotate"></i> New</button>
           <button type="button" class="chat-send-btn" onclick="nextFlashcard()" ${st.index === st.cards.length - 1 ? "disabled" : ""}>Next</button>
         </div>
       </div>`;
@@ -254,17 +239,204 @@ function prevFlashcard() {
     }
 }
 
-function generateQuiz() {
-    runAiTool("/api/ai/quiz", "quiz-panel", "quiz-output", renderQuiz, { count: recommendedStudyCount() });
+function toggleQuiz() {
+    const panel = document.getElementById("quiz-panel");
+    const output = document.getElementById("quiz-output");
+    if (!panel || !output) return;
+
+    if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+        return;
+    }
+
+    panel.classList.add("open");
+
+    if (window.quizState?.questions?.length > 0) {
+        output.classList.remove("muted-text");
+        updateQuizUI();
+        return;
+    }
+
+    if (window.studyToolsState.quiz.isGenerating) {
+        return;
+    }
+
+    generateQuiz();
 }
 
-function generateGlossary() {
-    runAiTool("/api/ai/glossary", "glossary-panel", "glossary-output", renderGlossary);
+async function generateQuiz(force = false) {
+    const panel = document.getElementById("quiz-panel");
+    const output = document.getElementById("quiz-output");
+    const btn = document.getElementById("btn-study-quiz");
+    if (!panel || !output) return;
+
+    if (!force && window.quizState?.questions?.length > 0) {
+        panel.classList.add("open");
+        output.classList.remove("muted-text");
+        updateQuizUI();
+        return;
+    }
+
+    if (window.studyToolsState.quiz.isGenerating) {
+        panel.classList.add("open");
+        return;
+    }
+
+    window.studyToolsState.quiz.isGenerating = true;
+    panel.classList.add("open");
+    if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Study quiz`;
+
+    try {
+        const data = await runWithProgress(output, "Generating quiz", () =>
+            postJson("/api/ai/quiz", { ...getStudyPayload(), count: recommendedStudyCount() })
+        );
+        output.classList.remove("muted-text");
+        output.innerHTML = renderQuiz(data);
+        showToast("Quiz ready.");
+    } catch (err) {
+        output.innerHTML = `<p class="muted-text">${escapeHtml(err.message || "Could not generate quiz.")}</p><div style="margin-top: 10px;"><button type="button" class="chat-clear-btn" onclick="generateQuiz(true)">Try again</button></div>`;
+        showToast("Quiz generation failed.");
+    } finally {
+        window.studyToolsState.quiz.isGenerating = false;
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-circle-question"></i> Study quiz`;
+    }
 }
 
-function generateFlashcards() {
-    runAiTool("/api/ai/flashcards", "flashcards-panel", "flashcards-output", renderFlashcards, { count: recommendedStudyCount() });
+function toggleGlossary() {
+    const panel = document.getElementById("glossary-panel");
+    const output = document.getElementById("glossary-output");
+    if (!panel || !output) return;
+
+    if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+        return;
+    }
+
+    panel.classList.add("open");
+
+    if (window.studyToolsState.glossary.html) {
+        output.classList.remove("muted-text");
+        output.innerHTML = window.studyToolsState.glossary.html;
+        return;
+    }
+
+    if (window.studyToolsState.glossary.isGenerating) {
+        return;
+    }
+
+    generateGlossary();
 }
+
+async function generateGlossary(force = false) {
+    const panel = document.getElementById("glossary-panel");
+    const output = document.getElementById("glossary-output");
+    const btn = document.getElementById("btn-study-glossary");
+    if (!panel || !output) return;
+
+    if (!force && window.studyToolsState.glossary.html) {
+        panel.classList.add("open");
+        output.classList.remove("muted-text");
+        output.innerHTML = window.studyToolsState.glossary.html;
+        return;
+    }
+
+    if (window.studyToolsState.glossary.isGenerating) {
+        panel.classList.add("open");
+        return;
+    }
+
+    window.studyToolsState.glossary.isGenerating = true;
+    panel.classList.add("open");
+    if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Glossary`;
+
+    try {
+        const data = await runWithProgress(output, "Generating glossary", () =>
+            postJson("/api/ai/glossary", getStudyPayload())
+        );
+        const formatted = renderGlossary(data);
+        window.studyToolsState.glossary.html = formatted;
+        output.classList.remove("muted-text");
+        output.innerHTML = formatted;
+        showToast("Glossary ready.");
+    } catch (err) {
+        window.studyToolsState.glossary.html = "";
+        output.innerHTML = `<p class="muted-text">${escapeHtml(err.message || "Could not generate glossary.")}</p><div style="margin-top: 10px;"><button type="button" class="chat-clear-btn" onclick="generateGlossary(true)">Try again</button></div>`;
+        showToast("Glossary generation failed.");
+    } finally {
+        window.studyToolsState.glossary.isGenerating = false;
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-book"></i> Glossary`;
+    }
+}
+
+function toggleFlashcards() {
+    const panel = document.getElementById("flashcards-panel");
+    const output = document.getElementById("flashcards-output");
+    if (!panel || !output) return;
+
+    if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+        return;
+    }
+
+    panel.classList.add("open");
+
+    if (window.flashState?.cards?.length > 0) {
+        output.classList.remove("muted-text");
+        updateFlashUI();
+        return;
+    }
+
+    if (window.studyToolsState.flashcards.isGenerating) {
+        return;
+    }
+
+    generateFlashcards();
+}
+
+async function generateFlashcards(force = false) {
+    const panel = document.getElementById("flashcards-panel");
+    const output = document.getElementById("flashcards-output");
+    const btn = document.getElementById("btn-study-flashcards");
+    if (!panel || !output) return;
+
+    if (!force && window.flashState?.cards?.length > 0) {
+        panel.classList.add("open");
+        output.classList.remove("muted-text");
+        updateFlashUI();
+        return;
+    }
+
+    if (window.studyToolsState.flashcards.isGenerating) {
+        panel.classList.add("open");
+        return;
+    }
+
+    window.studyToolsState.flashcards.isGenerating = true;
+    panel.classList.add("open");
+    if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Flashcards`;
+
+    try {
+        const data = await runWithProgress(output, "Generating flashcards", () =>
+            postJson("/api/ai/flashcards", { ...getStudyPayload(), count: recommendedStudyCount() })
+        );
+        output.classList.remove("muted-text");
+        output.innerHTML = renderFlashcards(data);
+        showToast("Flashcards ready.");
+    } catch (err) {
+        output.innerHTML = `<p class="muted-text">${escapeHtml(err.message || "Could not generate flashcards.")}</p><div style="margin-top: 10px;"><button type="button" class="chat-clear-btn" onclick="generateFlashcards(true)">Try again</button></div>`;
+        showToast("Flashcard generation failed.");
+    } finally {
+        window.studyToolsState.flashcards.isGenerating = false;
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-layer-group"></i> Flashcards`;
+    }
+}
+
+window.toggleQuiz = toggleQuiz;
+window.generateQuiz = generateQuiz;
+window.toggleGlossary = toggleGlossary;
+window.generateGlossary = generateGlossary;
+window.toggleFlashcards = toggleFlashcards;
+window.generateFlashcards = generateFlashcards;
 
 function setProgressButtonState(button, label, percent) {
     if (!button) return;
@@ -849,6 +1021,19 @@ async function runRagAsk() {
     }
 }
 
+function syncExpandButtons() {
+    const layout = document.querySelector(".result-layout");
+    const isExpanded = layout ? layout.classList.contains("side-expanded") : false;
+    document.querySelectorAll(".btn-card-expand").forEach(b => {
+        const icon = b.querySelector("i");
+        if (icon) {
+            icon.className = isExpanded ? "fa-solid fa-compress" : "fa-solid fa-expand";
+        }
+        b.title = isExpanded ? "Collapse panel" : "Expand panel";
+        b.setAttribute("aria-label", isExpanded ? "Collapse panel" : "Expand panel");
+    });
+}
+
 function initSideTabs() {
     const tabs = document.querySelectorAll(".side-tab");
     if (!tabs.length) return;
@@ -860,6 +1045,7 @@ function initSideTabs() {
             tab.classList.add("active");
             document.querySelectorAll(".side-panel").forEach(p => p.classList.remove("active"));
             document.getElementById(panelId)?.classList.add("active");
+            syncExpandButtons();
         });
     });
 }
@@ -867,20 +1053,14 @@ function initSideTabs() {
 function toggleSidePanelExpand(btn) {
     const layout = document.querySelector(".result-layout");
     if (!layout) return;
-    const isExpanded = layout.classList.toggle("side-expanded");
-    document.querySelectorAll(".btn-card-expand").forEach(b => {
-        const icon = b.querySelector("i");
-        if (icon) {
-            icon.className = isExpanded ? "fa-solid fa-compress" : "fa-solid fa-expand";
-        }
-        b.title = isExpanded ? "Collapse panel" : "Expand panel";
-        b.setAttribute("aria-label", isExpanded ? "Collapse panel" : "Expand panel");
-    });
+    layout.classList.toggle("side-expanded");
+    syncExpandButtons();
 }
 window.toggleSidePanelExpand = toggleSidePanelExpand;
 
 document.addEventListener("DOMContentLoaded", () => {
     initSideTabs();
+    syncExpandButtons();
     if (window.transcriptJobId) loadLectureNotes();
     initLibrarySelection();
 });
