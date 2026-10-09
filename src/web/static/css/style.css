@@ -78,7 +78,6 @@ body {
 [data-theme="dark"] .transcript-card,
 [data-theme="dark"] .transcript-header,
 [data-theme="dark"] .transcript-controls,
-[data-theme="dark"] .segment,
 [data-theme="dark"] .paragraph-content {
     background: #111827;
 }
@@ -1138,6 +1137,9 @@ input:focus {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    position: relative;
+    scroll-behavior: smooth;
+    padding-bottom: 24px;
 }
 
 .transcript-content,
@@ -1147,10 +1149,73 @@ input:focus {
 
 .segment {
     display: grid;
-    grid-template-columns: 78px 1fr;
+    grid-template-columns: 88px 1fr;
     gap: 14px;
-    padding: 14px 20px;
-    border-bottom: 1px solid #edf2f5;
+    padding: 14px 18px;
+    margin: 4px 10px;
+    border-radius: 14px;
+    border-left: 4px solid transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    opacity: 0.52;
+    cursor: pointer;
+    transition: opacity 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+                background 0.25s ease,
+                border-color 0.25s ease,
+                box-shadow 0.25s ease;
+    user-select: text;
+}
+
+.segment:hover {
+    opacity: 0.88;
+    background: rgba(37, 99, 235, 0.04);
+    transform: translateX(4px);
+}
+
+.segment.active {
+    opacity: 1 !important;
+    background: rgba(37, 99, 235, 0.08) !important;
+    border-left: 4px solid var(--primary) !important;
+    transform: scale(1.012) translateX(4px);
+    box-shadow: 0 4px 18px rgba(37, 99, 235, 0.08);
+}
+
+.segment.active .segment-text {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.segment.active .timestamp {
+    color: var(--primary);
+    font-weight: 800;
+    background: rgba(37, 99, 235, 0.12);
+}
+
+[data-theme="dark"] .segment {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    opacity: 0.44;
+}
+
+[data-theme="dark"] .segment:hover {
+    opacity: 0.82;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .segment.active {
+    background: rgba(59, 130, 246, 0.16) !important;
+    border-left: 4px solid #60a5fa !important;
+    box-shadow: 0 4px 22px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .segment.active .segment-text {
+    color: #f8fafc;
+    font-weight: 600;
+}
+
+[data-theme="dark"] .segment.active .timestamp {
+    color: #93c5fd;
+    font-weight: 800;
+    background: rgba(59, 130, 246, 0.2);
 }
 
 .segment-body {
@@ -1159,6 +1224,7 @@ input:focus {
 
 .segment-body .segment-text {
     margin-bottom: 6px;
+    transition: color 0.25s ease, font-weight 0.25s ease;
 }
 
 .note-btn {
@@ -1238,21 +1304,110 @@ input:focus {
     margin-top: 8px;
 }
 
-.segment:hover,
-.segment.active {
-    background: #f2f8fa;
-}
-
-[data-theme="dark"] .segment:hover,
-[data-theme="dark"] .segment.active {
-    background: #1f2937;
-}
-
 .timestamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: var(--primary);
-    font-weight: 800;
+    font-weight: 700;
     cursor: pointer;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: rgba(37, 99, 235, 0.06);
+    transition: all 0.2s ease;
+    align-self: start;
+    user-select: none;
+}
+
+.segment:hover .timestamp {
+    background: rgba(37, 99, 235, 0.12);
+}
+
+[data-theme="dark"] .timestamp {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.timestamp .ts-icon {
+    font-size: 0.72rem;
+    opacity: 0.6;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.segment:hover .timestamp .ts-icon {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.segment.active .timestamp .ts-icon {
+    opacity: 1;
+    color: var(--primary);
+}
+
+.segment.active.is-playing .timestamp .ts-icon {
+    color: var(--primary);
+    animation: lyricPulseIcon 1.2s infinite ease-in-out;
+}
+
+@keyframes lyricPulseIcon {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.22); opacity: 1; }
+}
+
+/* Floating Spotify-style Sync to Playback Pill */
+.lyrics-sync-container {
+    position: sticky;
+    bottom: 16px;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 30;
+    margin-top: -46px;
+    padding-bottom: 8px;
+}
+
+.lyrics-sync-pill {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+    backdrop-filter: blur(10px);
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: pillBounceIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.lyrics-sync-pill:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.45);
+}
+
+.lyrics-sync-pill:active {
+    transform: scale(0.97);
+}
+
+.lyrics-sync-pill i {
+    font-size: 0.85rem;
+}
+
+@keyframes pillBounceIn {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .segment-text,

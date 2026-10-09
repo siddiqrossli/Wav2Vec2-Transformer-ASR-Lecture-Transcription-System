@@ -404,15 +404,257 @@ function searchTranscript() {
     }
 }
 
-function jumpToTime(seconds) {
-    const audio = document.getElementById("audioPlayer");
+/* ==========================================================
+   SPOTIFY-STYLE REAL-TIME TRANSCRIPT SYNC & PLAYBACK ENGINE
+   ========================================================== */
 
-    if (audio) {
-        audio.currentTime = seconds;
-        audio.play();
+let userScrolledManually = false;
+let userScrollTimer = null;
+let isProgrammaticScroll = false;
+let programmaticScrollTimeout = null;
+let currentActiveSegment = null;
+
+function setProgrammaticScroll() {
+    isProgrammaticScroll = true;
+    if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
+    programmaticScrollTimeout = setTimeout(() => {
+        isProgrammaticScroll = false;
+    }, 500);
+}
+
+function showLyricsSyncPill() {
+    const container = document.getElementById("lyricsSyncContainer");
+    if (container) {
+        container.style.display = "flex";
     }
 }
 
+function hideLyricsSyncPill() {
+    const container = document.getElementById("lyricsSyncContainer");
+    if (container) {
+        container.style.display = "none";
+    }
+}
+
+function resumeLyricsSync() {
+    userScrolledManually = false;
+    if (userScrollTimer) {
+        clearTimeout(userScrollTimer);
+        userScrollTimer = null;
+    }
+    hideLyricsSyncPill();
+
+    if (currentActiveSegment) {
+        scrollSegmentToCenter(currentActiveSegment, "smooth");
+    }
+}
+
+function scrollSegmentToCenter(segmentEl, behavior = "smooth") {
+    const container = document.getElementById("transcriptScrollArea") || document.querySelector(".transcript-scroll-area");
+    if (!container || !segmentEl) return;
+
+    setProgrammaticScroll();
+
+    const containerRect = container.getBoundingClientRect();
+    const segmentRect = segmentEl.getBoundingClientRect();
+
+    const currentScrollTop = container.scrollTop;
+    const relativeTop = segmentRect.top - containerRect.top;
+    const targetScrollTop = currentScrollTop + relativeTop - (containerRect.height / 2) + (segmentRect.height / 2);
+
+    container.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: behavior
+    });
+}
+
+function initLyricsScrollDetection() {
+    const scrollArea = document.getElementById("transcriptScrollArea") || document.querySelector(".transcript-scroll-area");
+    if (!scrollArea) return;
+
+    const onUserScroll = () => {
+        if (isProgrammaticScroll) return;
+        userScrolledManually = true;
+        showLyricsSyncPill();
+
+        if (userScrollTimer) clearTimeout(userScrollTimer);
+        // Auto-resume after 4 seconds of idle inactivity
+        userScrollTimer = setTimeout(() => {
+            userScrolledManually = false;
+            hideLyricsSyncPill();
+            if (currentActiveSegment) {
+                scrollSegmentToCenter(currentActiveSegment, "smooth");
+            }
+        }, 4000);
+    };
+
+    scrollArea.addEventListener("wheel", onUserScroll, { passive: true });
+    scrollArea.addEventListener("touchmove", onUserScroll, { passive: true });
+    scrollArea.addEventListener("mousedown", (e) => {
+        // If clicking scrollbar track
+        if (e.offsetX > scrollArea.clientWidth) {
+            onUserScroll();
+        }
+    });
+}
+
+function handleSegmentClick(event, seconds) {
+    if (event.target.closest(".note-btn, .segment-note-wrap, .note-save-btn, .segment-note-input")) {
+        return;
+    }
+    jumpToTime(seconds);
+}
+
+function jumpToTime(seconds) {
+    const audio = document.getElementById("audioPlayer");
+    if (!audio) return;
+
+    audio.currentTime = seconds;
+    audio.play().catch(() => {});
+
+    // Reset manual scroll lock and instantly align
+    userScrolledManually = false;
+    hideLyricsSyncPill();
+    highlightActiveSegment(seconds, { forceScroll: true, immediate: false });
+}
+
+function formatTime(seconds) {
+    seconds = Math.max(0, seconds || 0);
+    const mm = Math.floor(seconds / 60);
+    const ss = Math.floor(seconds % 60);
+    return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+function highlightActiveSegment(currentTime, options = {}) {
+    const segments = document.querySelectorAll(".segment");
+    if (!segments.length) return;
+
+    const audio = document.getElementById("audioPlayer");
+    const isPlaying = audio && !audio.paused && !audio.ended;
+
+    let active = null;
+
+    // Fast range matching: find segment where start <= currentTime < next_start
+    for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const start = parseFloat(seg.dataset.time || "0");
+        const nextSeg = segments[i + 1];
+        const end = nextSeg ? parseFloat(nextSeg.dataset.time || "Infinity") : Infinity;
+
+        if (currentTime >= start && currentTime < end) {
+            active = seg;
+            break;
+        } else if (start <= currentTime) {
+            active = seg;
+        }
+    }
+
+    if (!active && segments.length > 0 && currentTime < parseFloat(segments[0].dataset.time || "0")) {
+        active = segments[0];
+    }
+
+    // Update active and playing states on all segments
+    segments.forEach(segment => {
+        const isCurrent = segment === active;
+
+        if (isCurrent) {
+            segment.classList.add("active");
+            if (isPlaying) {
+                segment.classList.add("is-playing");
+            } else {
+                segment.classList.remove("is-playing");
+            }
+
+            const icon = segment.querySelector(".ts-icon");
+            if (icon) {
+                icon.className = isPlaying
+                    ? "fa-solid fa-volume-high ts-icon"
+                    : "fa-solid fa-play ts-icon";
+            }
+        } else {
+            segment.classList.remove("active", "is-playing");
+            const icon = segment.querySelector(".ts-icon");
+            if (icon) {
+                icon.className = "fa-solid fa-play ts-icon";
+            }
+        }
+    });
+
+    // Also support sub-sentence highlighting if single-segment spans exist
+    if (active) {
+        const sentenceSpans = active.querySelectorAll(".lyric-sentence");
+        if (sentenceSpans.length > 0) {
+            sentenceSpans.forEach(span => {
+                const sStart = parseFloat(span.dataset.start || "0");
+                const sEnd = parseFloat(span.dataset.end || "Infinity");
+                if (currentTime >= sStart && currentTime < sEnd) {
+                    span.classList.add("active");
+                } else {
+                    span.classList.remove("active");
+                }
+            });
+        }
+    }
+
+    const segmentChanged = active !== currentActiveSegment;
+    currentActiveSegment = active;
+
+    // Auto-scroll logic: only when segment changes or forceScroll is true
+    if (active) {
+        if (options.forceScroll) {
+            scrollSegmentToCenter(active, options.immediate ? "auto" : "smooth");
+        } else if (segmentChanged && !userScrolledManually) {
+            scrollSegmentToCenter(active, "smooth");
+        }
+    }
+}
+
+// Fallback sentence breakdown for single-segment transcripts
+function initSingleSegmentLyricSpans() {
+    const segments = document.querySelectorAll(".segment");
+    const audio = document.getElementById("audioPlayer");
+    if (segments.length !== 1 || !audio) return;
+
+    const singleSeg = segments[0];
+    const textEl = singleSeg.querySelector(".segment-text");
+    if (!textEl) return;
+
+    const fullText = (textEl.dataset.original || textEl.textContent || "").trim();
+    if (!fullText) return;
+
+    // Split into sentences / clauses
+    const sentences = fullText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [fullText];
+    if (sentences.length <= 1) {
+        const words = fullText.split(/\s+/);
+        if (words.length <= 10) return;
+        const chunks = [];
+        for (let i = 0; i < words.length; i += 10) {
+            chunks.push(words.slice(i, i + 10).join(" "));
+        }
+        setupSpans(chunks);
+    } else {
+        setupSpans(sentences);
+    }
+
+    function setupSpans(parts) {
+        const duration = audio.duration || parseFloat(singleSeg.dataset.duration || "10") || 10;
+        const totalLen = parts.reduce((acc, p) => acc + p.trim().length, 0);
+        let curTime = 0;
+
+        const html = parts.map(part => {
+            const pTrim = part.trim();
+            const segDur = (pTrim.length / Math.max(1, totalLen)) * duration;
+            const start = curTime;
+            const end = curTime + segDur;
+            curTime = end;
+            return `<span class="lyric-sentence" data-start="${start.toFixed(1)}" data-end="${end.toFixed(1)}">${escapeHtml(part)} </span>`;
+        }).join("");
+
+        textEl.innerHTML = html;
+    }
+}
+
+// Attach player listeners
 const audio = document.getElementById("audioPlayer");
 
 if (audio) {
@@ -432,43 +674,40 @@ if (audio) {
         highlightActiveSegment(audio.currentTime);
     });
 
+    // Real-time Scrubbing / Seeking: instantly jump transcript to matching minute
+    audio.addEventListener("seeking", function () {
+        highlightActiveSegment(audio.currentTime, { forceScroll: false });
+    });
+
+    audio.addEventListener("seeked", function () {
+        highlightActiveSegment(audio.currentTime, { forceScroll: !userScrolledManually });
+    });
+
     audio.addEventListener("play", function () {
         document.querySelector(".audio-artwork-card")?.classList.add("is-playing");
+        highlightActiveSegment(audio.currentTime, { forceScroll: !userScrolledManually });
     });
 
     audio.addEventListener("pause", function () {
         document.querySelector(".audio-artwork-card")?.classList.remove("is-playing");
+        highlightActiveSegment(audio.currentTime, { forceScroll: false });
     });
 
     audio.addEventListener("ended", function () {
         document.querySelector(".audio-artwork-card")?.classList.remove("is-playing");
+        highlightActiveSegment(audio.currentTime, { forceScroll: false });
+    });
+
+    audio.addEventListener("loadedmetadata", function () {
+        initSingleSegmentLyricSpans();
     });
 }
 
-function formatTime(seconds) {
-    seconds = Math.max(0, seconds || 0);
-    const mm = Math.floor(seconds / 60);
-    const ss = Math.floor(seconds % 60);
-
-    return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
-
-function highlightActiveSegment(currentTime) {
-    const segments = document.querySelectorAll(".segment");
-
-    let active = null;
-
-    segments.forEach(segment => {
-        const start = parseFloat(segment.dataset.time || "0");
-
-        if (start <= currentTime) {
-            active = segment;
-        }
-
-        segment.classList.remove("active");
-    });
-
-    if (active) {
-        active.classList.add("active");
+// Initialize on document ready
+document.addEventListener("DOMContentLoaded", function () {
+    initLyricsScrollDetection();
+    initSingleSegmentLyricSpans();
+    if (audio) {
+        highlightActiveSegment(audio.currentTime, { forceScroll: false });
     }
-}
+});

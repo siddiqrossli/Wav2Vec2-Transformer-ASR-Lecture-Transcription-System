@@ -285,6 +285,52 @@ def _decode_label(decode_mode: str) -> str:
     return "Greedy CTC Decoding"
 
 
+def _split_into_timed_sentences(text: str, duration_s: float) -> List[Dict[str, Any]]:
+    clean = (text or "").strip()
+    if not clean:
+        return []
+
+    import re
+    # Try splitting by sentence terminal punctuation (.!?)
+    raw_sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
+
+    # If sentences are long or text has no punctuation (common in raw ASR transcripts)
+    if len(raw_sentences) <= 1:
+        words = clean.split()
+        if len(words) > 12:
+            chunk_size = 10
+            raw_sentences = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+        else:
+            raw_sentences = [clean]
+
+    if len(raw_sentences) <= 1:
+        return [
+            {
+                "timestamp_seconds": 0.0,
+                "timestamp": "00:00",
+                "text": postprocess_transcript(clean),
+            }
+        ]
+
+    total_words = sum(max(1, len(s.split())) for s in raw_sentences)
+    current_time = 0.0
+    segments = []
+
+    for s in raw_sentences:
+        w_count = max(1, len(s.split()))
+        seg_duration = (w_count / total_words) * max(float(duration_s), 1.0)
+        segments.append(
+            {
+                "timestamp_seconds": round(current_time, 1),
+                "timestamp": _fmt_timestamp(current_time),
+                "text": postprocess_transcript(s),
+            }
+        )
+        current_time += seg_duration
+
+    return segments
+
+
 def transcribe_audio_direct(
     model: ASRModel,
     audio: np.ndarray,
@@ -293,18 +339,9 @@ def transcribe_audio_direct(
 ) -> Tuple[str, List[Dict[str, Any]]]:
     raw_text = model.transcribe(audio, decode_mode=decode_mode)
     raw_text = (raw_text or "").strip()
+    duration_s = float(len(audio)) / float(sr) if sr > 0 else 0.0
 
-    segment_items: List[Dict[str, Any]] = []
-
-    if raw_text:
-        segment_items.append(
-            {
-                "timestamp_seconds": 0.0,
-                "timestamp": "00:00",
-                "text": postprocess_transcript(raw_text),
-            }
-        )
-
+    segment_items = _split_into_timed_sentences(raw_text, duration_s)
     return raw_text, segment_items
 
 
@@ -414,13 +451,7 @@ def cleanup_old_uploads() -> int:
 
 
 def _make_segments(full_text: str, duration_s: float) -> List[Dict[str, Any]]:
-    return [
-        {
-            "timestamp_seconds": 0,
-            "timestamp": _fmt_timestamp(0),
-            "text": full_text.strip(),
-        }
-    ]
+    return _split_into_timed_sentences(full_text, duration_s)
 
 
 @app.get("/uploads/<path:filename>")
@@ -779,6 +810,25 @@ def view_transcript(job_id: str):
     if transcript is None:
         flash("Transcript not found.", "error")
         return redirect(url_for("library_page"))
+
+    # Enhance single-segment legacy transcripts into timed sentences for Spotify lyrics
+    if len(transcript.get("segments", [])) <= 1 and transcript.get("full_text"):
+        dur_str = transcript.get("duration") or "00:00"
+        dur_s = 0.0
+        try:
+            parts = [float(p) for p in dur_str.split(":")]
+            if len(parts) == 2:
+                dur_s = parts[0] * 60 + parts[1]
+            elif len(parts) == 3:
+                dur_s = parts[0] * 3600 + parts[1] * 60 + parts[2]
+        except Exception:
+            dur_s = 0.0
+
+        timed_segs = _split_into_timed_sentences(transcript["full_text"], dur_s)
+        if len(timed_segs) > 1:
+            transcript["segments"] = timed_segs
+            transcript["num_segments"] = len(timed_segs)
+
     status = ai_status()
     return render_template(
         "result.html",

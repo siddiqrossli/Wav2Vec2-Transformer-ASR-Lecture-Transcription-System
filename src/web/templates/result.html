@@ -126,12 +126,13 @@
             </div>
             <div id="translate-progress-slot" class="translate-progress-slot" style="display:none;"></div>
 
-            <div class="transcript-scroll-area">
+            <div class="transcript-scroll-area" id="transcriptScrollArea">
                 <div class="transcript-content" id="timestamped-layout">
                     {% for segment in transcript.segments %}
-                    <div class="segment" data-time="{{ segment.timestamp_seconds }}" data-segment-idx="{{ loop.index0 }}">
-                        <span class="timestamp" onclick="jumpToTime({{ segment.timestamp_seconds }})">
-                            {{ segment.timestamp }}
+                    <div class="segment" data-time="{{ segment.timestamp_seconds }}" data-segment-idx="{{ loop.index0 }}" onclick="handleSegmentClick(event, {{ segment.timestamp_seconds }})" title="Play from {{ segment.timestamp }}">
+                        <span class="timestamp" title="Play from {{ segment.timestamp }}">
+                            <i class="fa-solid fa-play ts-icon"></i>
+                            <span class="ts-text">{{ segment.timestamp }}</span>
                         </span>
 
                         <div class="segment-body">
@@ -161,6 +162,13 @@
                     <div class="paragraph-text" id="paragraph-text" data-original="{{ transcript.full_text }}">
                         {{ transcript.full_text }}
                     </div>
+                </div>
+
+                <div class="lyrics-sync-container" id="lyricsSyncContainer" style="display: none;">
+                    <button type="button" id="btn-sync-lyrics" class="lyrics-sync-pill" onclick="resumeLyricsSync()" title="Scroll back to currently playing line">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        <span>Sync with playback</span>
+                    </button>
                 </div>
             </div>
         </div>
