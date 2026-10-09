@@ -1805,6 +1805,26 @@ mark.search-hit,
     }
 }
 
+.chat-typing-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 0.95em;
+    background: var(--primary);
+    margin-left: 3px;
+    vertical-align: -0.1em;
+    border-radius: 1px;
+    animation: cursorBlink 0.7s infinite;
+}
+
+[data-theme="dark"] .chat-typing-cursor {
+    background: #67b9cf;
+}
+
+@keyframes cursorBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
 .ai-card-study {
     background: linear-gradient(180deg, #fff, #f8fcfd);
 }

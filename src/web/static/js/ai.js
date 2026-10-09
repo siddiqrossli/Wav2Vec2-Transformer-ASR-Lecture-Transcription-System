@@ -52,30 +52,158 @@ function appendChatMessage(role, text) {
     log.scrollTop = log.scrollHeight;
 }
 
-async function generateAiSummary() {
+window.aiSummaryState = {
+    isGenerating: false,
+    html: "",
+};
+
+function toggleAiSummary() {
+    const panel = document.getElementById("ai-summary-panel");
     const output = document.getElementById("ai-summary-output");
+    if (!panel || !output) return;
+
+    // True toggle: if already open, collapse it
+    if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+        return;
+    }
+
+    // Open panel
+    panel.classList.add("open");
+
+    // If summary is already cached, show it immediately without re-fetching
+    if (window.aiSummaryState.html) {
+        output.classList.remove("muted-text");
+        output.innerHTML = window.aiSummaryState.html;
+        return;
+    }
+
+    // If already generating in background, keep displaying the active progress bar
+    if (window.aiSummaryState.isGenerating) {
+        return;
+    }
+
+    // Otherwise start generating
+    generateAiSummary();
+}
+
+async function generateAiSummary(force = false) {
+    const output = document.getElementById("ai-summary-output");
+    const panel = document.getElementById("ai-summary-panel");
     const btn = document.getElementById("btn-ai-summary");
 
-    if (!output) return;
+    if (!output || !panel) return;
 
-    openAiPanel("ai-summary-panel", true);
+    if (!force && window.aiSummaryState.html) {
+        panel.classList.add("open");
+        output.classList.remove("muted-text");
+        output.innerHTML = window.aiSummaryState.html;
+        return;
+    }
+
+    if (window.aiSummaryState.isGenerating) {
+        panel.classList.add("open");
+        return;
+    }
+
+    window.aiSummaryState.isGenerating = true;
+    panel.classList.add("open");
     setAiPanelLoading("ai-summary-panel", true);
-    if (btn) btn.disabled = true;
+
+    if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> AI Summary`;
+    }
 
     try {
         const data = await runWithProgress(output, "Generating AI summary", () =>
             fetchAi("/api/ai/summarize", getTranscriptPayload())
         );
+        const regenerateBtn = `<div style="margin-top: 14px; text-align: right;"><button type="button" class="chat-clear-btn" onclick="generateAiSummary(true)" title="Regenerate summary"><i class="fa-solid fa-arrows-rotate"></i> Regenerate</button></div>`;
+        const formatted = formatAiMarkdown(data.summary || "") + regenerateBtn;
+        window.aiSummaryState.html = formatted;
         output.classList.remove("muted-text");
-        output.innerHTML = formatAiMarkdown(data.summary || "");
+        output.innerHTML = formatted;
         showToast("AI summary ready.");
     } catch (err) {
-        output.innerHTML = `<p class="muted-text">${escapeHtml(err.message || "Could not generate summary.")}</p>`;
+        window.aiSummaryState.html = "";
+        output.innerHTML = `<p class="muted-text">${escapeHtml(err.message || "Could not generate summary.")}</p><div style="margin-top: 10px;"><button type="button" class="chat-clear-btn" onclick="generateAiSummary(true)">Try again</button></div>`;
         showToast("AI summary failed.");
     } finally {
+        window.aiSummaryState.isGenerating = false;
         setAiPanelLoading("ai-summary-panel", false);
-        if (btn) btn.disabled = false;
+        if (btn) {
+            btn.innerHTML = `<i class="fa-solid fa-sparkles"></i> AI Summary`;
+        }
     }
+}
+
+function toggleAiChat() {
+    const panel = document.getElementById("ai-chat-panel");
+    if (!panel) return;
+    const isNowOpen = panel.classList.toggle("open");
+    if (isNowOpen) {
+        const input = document.getElementById("ai-chat-input");
+        input?.focus();
+        const log = document.getElementById("ai-chat-log");
+        if (log) log.scrollTop = log.scrollHeight;
+    }
+}
+
+window.currentChatStreamTimer = null;
+
+function streamAssistantMessage(fullText, onComplete) {
+    if (window.currentChatStreamTimer) {
+        clearInterval(window.currentChatStreamTimer);
+        window.currentChatStreamTimer = null;
+    }
+
+    const log = document.getElementById("ai-chat-log");
+    if (!log) {
+        appendChatMessage("assistant", fullText);
+        if (onComplete) onComplete();
+        return;
+    }
+
+    const div = document.createElement("div");
+    div.className = "chat-msg chat-msg-assistant";
+    div.innerHTML = `
+        <span class="chat-msg-label">Assistant</span>
+        <div class="chat-msg-body"></div>
+    `;
+    log.appendChild(div);
+    const body = div.querySelector(".chat-msg-body");
+
+    // Split text into tokens while preserving whitespace & newlines
+    const tokens = fullText.split(/(\s+)/);
+    let index = 0;
+    let accumulated = "";
+
+    // Dynamic speed: ~50 words/sec (2 tokens per 20ms) for snappy, natural ChatGPT-style streaming
+    const stepInterval = tokens.length > 300 ? 16 : 20;
+    const tokensPerStep = tokens.length > 300 ? 3 : 2;
+
+    window.currentChatStreamTimer = setInterval(() => {
+        for (let i = 0; i < tokensPerStep && index < tokens.length; i++) {
+            accumulated += tokens[index];
+            index++;
+        }
+
+        body.innerHTML = formatAiMarkdown(accumulated) + '<span class="chat-typing-cursor"></span>';
+
+        // Auto-scroll to follow new text smoothly
+        const isNearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 140;
+        if (isNearBottom) {
+            log.scrollTop = log.scrollHeight;
+        }
+
+        if (index >= tokens.length) {
+            clearInterval(window.currentChatStreamTimer);
+            window.currentChatStreamTimer = null;
+            body.innerHTML = formatAiMarkdown(fullText);
+            log.scrollTop = log.scrollHeight;
+            if (onComplete) onComplete();
+        }
+    }, stepInterval);
 }
 
 async function sendAiChat() {
@@ -119,18 +247,28 @@ async function sendAiChat() {
         const answer = data.answer || "";
 
         typing.remove();
-        appendChatMessage("assistant", answer);
-        aiChatHistory.push({ role: "assistant", content: answer });
+        streamAssistantMessage(answer, () => {
+            aiChatHistory.push({ role: "assistant", content: answer });
+            if (btn) btn.disabled = false;
+            input.focus();
+        });
     } catch (err) {
         typing.remove();
         appendChatMessage("assistant", err.message || "Sorry, something went wrong.");
-    } finally {
         if (btn) btn.disabled = false;
         input.focus();
     }
 }
 
+window.toggleAiSummary = toggleAiSummary;
+window.toggleAiChat = toggleAiChat;
+window.generateAiSummary = generateAiSummary;
+
 function clearAiChat() {
+    if (window.currentChatStreamTimer) {
+        clearInterval(window.currentChatStreamTimer);
+        window.currentChatStreamTimer = null;
+    }
     aiChatHistory.length = 0;
     const log = document.getElementById("ai-chat-log");
     if (log) {

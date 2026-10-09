@@ -274,17 +274,17 @@ LLM_MODEL=gemini-3.5-flash</pre>
             </div>
             {% endif %}
 
-            <button type="button" id="btn-ai-summary" onclick="generateAiSummary()" {% if not ai_available %}disabled{% endif %}>
+            <button type="button" id="btn-ai-summary" onclick="toggleAiSummary()" {% if not ai_available %}disabled{% endif %}>
                 <i class="fa-solid fa-sparkles"></i> AI Summary
             </button>
-            <div id="ai-summary-panel" class="analysis-panel ai-output-panel ai-switch-panel">
+            <div id="ai-summary-panel" class="analysis-panel ai-output-panel">
                 <div id="ai-summary-output" class="ai-output"></div>
             </div>
 
-            <button type="button" class="ai-chat-toggle" onclick="openAiPanel('ai-chat-panel')">
+            <button type="button" class="ai-chat-toggle" onclick="toggleAiChat()">
                 <i class="fa-solid fa-comments"></i> Chat about lecture
             </button>
-            <div id="ai-chat-panel" class="analysis-panel ai-chat-panel ai-switch-panel">
+            <div id="ai-chat-panel" class="analysis-panel ai-chat-panel">
                 <div id="ai-chat-log" class="ai-chat-log">
                     <div class="chat-msg chat-msg-assistant">
                         <span class="chat-msg-label">Assistant</span>
