@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional
 
 from config import WebConfig
 
+_EPHEMERAL_STORE: Dict[str, Dict[str, Any]] = {}
+_EPHEMERAL_NOTES: Dict[str, Dict[str, str]] = {}
+
 
 def _library_dir() -> Path:
     p = Path(WebConfig.TRANSCRIPT_LIBRARY_DIR)
@@ -26,6 +29,11 @@ def save_transcript(job_id: str, transcript: Dict[str, Any]) -> None:
     payload = dict(transcript)
     payload["job_id"] = job_id
     payload["saved_at"] = datetime.now().isoformat(timespec="seconds")
+
+    if getattr(WebConfig, "HIDE_LIBRARY", False):
+        _EPHEMERAL_STORE[job_id] = payload
+        return
+
     _transcript_path(job_id).write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -33,9 +41,13 @@ def save_transcript(job_id: str, transcript: Dict[str, Any]) -> None:
 
 
 def load_transcript(job_id: str) -> Optional[Dict[str, Any]]:
+    if getattr(WebConfig, "HIDE_LIBRARY", False) and job_id in _EPHEMERAL_STORE:
+        return dict(_EPHEMERAL_STORE[job_id])
+
     path = _transcript_path(job_id)
     if not path.is_file():
-        return None
+        return _EPHEMERAL_STORE.get(job_id)
+
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         return None
@@ -54,8 +66,12 @@ def load_transcript(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 def list_transcripts() -> List[Dict[str, Any]]:
+    if getattr(WebConfig, "HIDE_LIBRARY", False):
+        return []
+
     rows: List[Dict[str, Any]] = []
     for path in sorted(_library_dir().glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+
         if path.name.endswith("_notes.json"):
             continue
         try:
@@ -78,15 +94,22 @@ def list_transcripts() -> List[Dict[str, Any]]:
 
 
 def load_notes(job_id: str) -> Dict[str, str]:
+    if getattr(WebConfig, "HIDE_LIBRARY", False) and job_id in _EPHEMERAL_NOTES:
+        return dict(_EPHEMERAL_NOTES[job_id])
+
     path = _notes_path(job_id)
     if not path.is_file():
-        return {}
+        return dict(_EPHEMERAL_NOTES.get(job_id, {}))
     data = json.loads(path.read_text(encoding="utf-8"))
     notes = data.get("notes") if isinstance(data, dict) else {}
     return notes if isinstance(notes, dict) else {}
 
 
 def save_notes(job_id: str, notes: Dict[str, str]) -> None:
+    if getattr(WebConfig, "HIDE_LIBRARY", False):
+        _EPHEMERAL_NOTES[job_id] = dict(notes)
+        return
+
     payload = {"job_id": job_id, "notes": notes, "updated_at": datetime.now().isoformat(timespec="seconds")}
     _notes_path(job_id).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -96,16 +119,26 @@ def delete_transcript(job_id: str) -> bool:
     if not jid:
         return False
 
+    deleted_any = False
+    if jid in _EPHEMERAL_STORE:
+        del _EPHEMERAL_STORE[jid]
+        deleted_any = True
+    if jid in _EPHEMERAL_NOTES:
+        del _EPHEMERAL_NOTES[jid]
+        deleted_any = True
+
     transcript_path = _transcript_path(jid)
     notes_path = _notes_path(jid)
 
-    deleted_any = False
     if transcript_path.exists():
         transcript_path.unlink()
         deleted_any = True
 
     if notes_path.exists():
         notes_path.unlink()
+        deleted_any = True
+
+    return deleted_any
 
     return deleted_any
 

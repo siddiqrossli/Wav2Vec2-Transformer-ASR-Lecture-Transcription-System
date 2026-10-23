@@ -39,7 +39,9 @@
                 <nav class="landing-links" aria-label="Landing navigation">
                     <a href="{{ url_for('index') }}#home">Home</a>
                     <a href="{{ url_for('index') }}#how">How It Works</a>
+                    {% if not hide_library %}
                     <a href="{{ url_for('index') }}#library">Library</a>
+                    {% endif %}
                 </nav>
 
                 <button type="button" class="theme-toggle landing-theme" onclick="toggleTheme()" title="Toggle theme">
@@ -197,7 +199,9 @@
             <nav class="landing-links" aria-label="Landing navigation">
                 <a href="#home" class="active">Home</a>
                 <a href="#how">How It Works</a>
+                {% if not hide_library %}
                 <a href="#library">Library</a>
+                {% endif %}
             </nav>
 
             <button type="button" class="theme-toggle landing-theme" onclick="toggleTheme()" title="Toggle theme">
@@ -321,6 +325,7 @@
                 </div>
             </section>
 
+            {% if not hide_library %}
             <section id="library" class="snap-section library-section">
                 <div class="library-section-header">
                     <p class="landing-kicker">Saved Transcripts &amp; RAG</p>
@@ -387,6 +392,7 @@
                     </div>
                 </div>
             </section>
+            {% endif %}
         </main>
     {% endif %}
 

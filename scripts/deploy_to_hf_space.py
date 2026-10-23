@@ -42,16 +42,26 @@ def main():
     # 2. Copy src directory (excluding pycache, uploads, transcripts, images, env)
     def ignore_filter(dir_path, names):
         ignored = set()
+        p = Path(dir_path)
         for name in names:
-            if name in {"__pycache__", "uploads", "transcripts", "images", ".git"}:
+            if name in {"__pycache__", ".git"}:
                 ignored.add(name)
-            elif name.endswith((".pyc", ".env", ".log", ".wav", ".mp3", ".rar", ".zip")):
+            elif name in {"uploads", "transcripts"} and "static" not in p.parts:
+                ignored.add(name)
+            elif name.endswith((".pyc", ".env", ".log", ".rar", ".zip")):
+                ignored.add(name)
+            elif name.endswith((".wav", ".mp3", ".mp4", ".mov", ".mkv")) and "static" not in p.parts:
                 ignored.add(name)
         return ignored
 
     src_dest = staging_dir / "src"
     shutil.copytree(project_root / "src", src_dest, ignore=ignore_filter)
     print("  + Copied clean src/ tree")
+
+    docs_src = project_root / "docs"
+    if docs_src.is_dir():
+        shutil.copytree(docs_src, staging_dir / "docs")
+        print("  + Copied docs/ directory")
 
     # Create empty .gitkeep inside uploads and data/transcripts so folders exist
     (src_dest / "web" / "uploads").mkdir(parents=True, exist_ok=True)

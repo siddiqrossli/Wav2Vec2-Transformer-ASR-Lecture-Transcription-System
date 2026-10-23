@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+try:
+    import spaces
+except ImportError:
+    pass
+
 import os
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -62,16 +67,19 @@ app.config.from_object(WebConfig)
 app.secret_key = WebConfig.SECRET_KEY
 WebConfig.init_app()
 
+
+@app.context_processor
+def inject_globals():
+    return {
+        "hide_library": getattr(WebConfig, "HIDE_LIBRARY", False),
+    }
+
+
 _PIPELINE: TranscriptionPipeline | None = None
 
-# Support Hugging Face ZeroGPU with graceful local fallback
-try:
-    import spaces
-    gpu_decorator = spaces.GPU(duration=120)
-    print("[ZeroGPU] spaces.GPU enabled with 120s duration quota")
-except (ImportError, Exception):
-    def gpu_decorator(fn):
-        return fn
+# ZeroGPU lease is managed at top-level by app.py runner
+def gpu_decorator(fn):
+    return fn
 
 
 def convert_media_to_wav(input_path: Path, output_path: Path) -> Path:
@@ -235,7 +243,7 @@ def _get_pipeline() -> TranscriptionPipeline:
     if _PIPELINE is not None:
         return _PIPELINE
 
-    model_path = WebConfig.MODEL_PATH
+    model_path = WebConfig.get_model_path()
     p = Path(model_path)
 
     if not p.exists():
@@ -340,14 +348,14 @@ def _split_into_timed_sentences(text: str, duration_s: float) -> List[Dict[str, 
     return segments
 
 
-@gpu_decorator
 def transcribe_audio_direct(
     model: ASRModel,
     audio: np.ndarray,
     sr: int,
     decode_mode: str = "lm",
+    device: str = "cpu",
 ) -> Tuple[str, List[Dict[str, Any]]]:
-    raw_text = model.transcribe(audio, decode_mode=decode_mode)
+    raw_text = model.transcribe(audio, decode_mode=decode_mode, device=device)
     raw_text = (raw_text or "").strip()
     duration_s = float(len(audio)) / float(sr) if sr > 0 else 0.0
 
@@ -355,13 +363,13 @@ def transcribe_audio_direct(
     return raw_text, segment_items
 
 
-@gpu_decorator
 def transcribe_audio_in_chunks(
     pipe: TranscriptionPipeline,
     audio: np.ndarray,
     sr: int,
     chunk_seconds: int = 10,
     decode_mode: str = "lm",
+    device: str = "cpu",
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Transcribe long audio in chunks using selected decoding mode.
@@ -384,7 +392,7 @@ def transcribe_audio_in_chunks(
         start_seconds = float(start_sample) / float(sr)
 
         try:
-            chunk_text = pipe.model.transcribe(chunk, decode_mode=decode_mode)
+            chunk_text = pipe.model.transcribe(chunk, decode_mode=decode_mode, device=device)
             chunk_text = (chunk_text or "").strip()
 
             if chunk_text:
@@ -417,6 +425,41 @@ def transcribe_audio_in_chunks(
 
     full_raw_text = " ".join(raw_text_parts).strip()
     return full_raw_text, segment_items
+
+
+def transcribe_audio_file(
+    audio_path: str,
+    decode_mode: str = "lm",
+    device: str = "cpu",
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """
+    Load 16kHz WAV file and transcribe using direct or chunked method.
+    This function is executed inside ZeroGPU's @spaces.GPU context or local pipeline.
+    """
+    audio, sr = _read_wav_pcm(str(audio_path))
+    audio = _resample_linear(audio, sr, WebConfig.TARGET_SR)
+    audio = _normalize_audio(audio)
+    duration_s = float(len(audio)) / float(WebConfig.TARGET_SR) if WebConfig.TARGET_SR > 0 else 0.0
+
+    pipe = _get_pipeline()
+    if duration_s <= 60:
+        raw_text, chunk_segments = transcribe_audio_direct(
+            model=pipe.model,
+            audio=audio,
+            sr=WebConfig.TARGET_SR,
+            decode_mode=decode_mode,
+            device=device,
+        )
+    else:
+        raw_text, chunk_segments = transcribe_audio_in_chunks(
+            pipe=pipe,
+            audio=audio,
+            sr=WebConfig.TARGET_SR,
+            chunk_seconds=WebConfig.CHUNK_SECONDS,
+            decode_mode=decode_mode,
+            device=device,
+        )
+    return raw_text, chunk_segments
 
 
 def _fmt_timestamp(seconds: float) -> str:
@@ -545,31 +588,34 @@ def transcribe():
             )
             return redirect(url_for("index", upload=1))
 
-        pipe = _get_pipeline()
+        # In cloud mode (Hugging Face Spaces), route through the Gradio Event Queue
+        # to acquire an NVIDIA A10G GPU lease via ZeroGPU dynamic allocator
+        if os.environ.get("SPACE_ID"):
+            x_ip_token = request.headers.get("X-IP-Token") or request.headers.get("x-ip-token") or ""
+            print(f"[ZeroGPU Bridge] Forwarding to Gradio Queue (has X-IP-Token: {bool(x_ip_token)})")
+            try:
+                from gradio_client import Client
 
-        if duration_s <= 60:
-            print(
-                f"[DEBUG] Short audio ({duration_s:.1f}s): "
-                f"using direct transcription with {_decode_label(decode_mode)}"
-            )
-            raw_text, chunk_segments = transcribe_audio_direct(
-                model=pipe.model,
-                audio=audio,
-                sr=WebConfig.TARGET_SR,
-                decode_mode=decode_mode,
-            )
+                headers = {}
+                if x_ip_token:
+                    headers["X-IP-Token"] = x_ip_token
+                hf_token = os.environ.get("HF_TOKEN")
+                if hf_token:
+                    headers["Authorization"] = f"Bearer {hf_token}"
+
+                client = Client(f"http://127.0.0.1:{WebConfig.PORT}", headers=headers)
+                result = client.predict(
+                    audio_path=str(audio_path),
+                    decode_mode=decode_mode,
+                    api_name="/transcribe_zerogpu",
+                )
+                raw_text, chunk_segments = result[0], result[1]
+                print(f"[ZeroGPU Bridge] GPU transcription succeeded ({len(raw_text)} chars)")
+            except Exception as bridge_err:
+                print(f"[ZeroGPU Bridge Fallback] Gradio bridge error ({bridge_err}) -> executing directly on CPU")
+                raw_text, chunk_segments = transcribe_audio_file(str(audio_path), decode_mode=decode_mode, device="cpu")
         else:
-            print(
-                f"[DEBUG] Long audio ({duration_s:.1f}s): "
-                f"using chunked transcription with {_decode_label(decode_mode)}"
-            )
-            raw_text, chunk_segments = transcribe_audio_in_chunks(
-                pipe=pipe,
-                audio=audio,
-                sr=WebConfig.TARGET_SR,
-                chunk_seconds=WebConfig.CHUNK_SECONDS,
-                decode_mode=decode_mode,
-            )
+            raw_text, chunk_segments = transcribe_audio_file(str(audio_path), decode_mode=decode_mode, device="cpu")
 
         text = postprocess_transcript(raw_text)
 
@@ -823,6 +869,8 @@ def api_rag_ask():
 
 @app.get("/library")
 def library_page():
+    if getattr(WebConfig, "HIDE_LIBRARY", False):
+        return redirect(url_for("index"))
     return redirect(url_for("index") + "#library")
 
 
@@ -831,7 +879,8 @@ def view_transcript(job_id: str):
     transcript = load_transcript(job_id)
     if transcript is None:
         flash("Transcript not found.", "error")
-        return redirect(url_for("library_page"))
+        target_endpoint = "index" if getattr(WebConfig, "HIDE_LIBRARY", False) else "library_page"
+        return redirect(url_for(target_endpoint))
 
     # Enhance single-segment legacy transcripts into timed sentences for Spotify lyrics
     if len(transcript.get("segments", [])) <= 1 and transcript.get("full_text"):
@@ -931,7 +980,7 @@ if __name__ == "__main__":
     print(f"Address: http://{WebConfig.HOST}:{WebConfig.PORT}")
     print(f"Debug mode: {WebConfig.DEBUG}")
     print(f"Upload folder: {WebConfig.UPLOAD_FOLDER}")
-    print(f"Model path: {WebConfig.MODEL_PATH}")
+    print(f"Model path: {WebConfig.get_model_path()}")
     cleanup_old_uploads()
 
     app.run(

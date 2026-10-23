@@ -43,10 +43,12 @@
                     <i class="fa-solid fa-cloud-arrow-up"></i>
                     Upload
                 </a>
+                {% if not hide_library %}
                 <a href="{{ url_for('library_page') }}" class="tool-item {% if request.endpoint == 'library_page' %}active{% endif %}">
                     <i class="fa-solid fa-book"></i>
                     Library
                 </a>
+                {% endif %}
             </nav>
 
             <div class="sidebar-features">

@@ -19,7 +19,8 @@ from .config import Config
 class ASRModel:
     def __init__(self, config: Config):
         self.config = config
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # On ZeroGPU Spaces, model starts on CPU and moves to CUDA only during @spaces.GPU lease
+        self.device = "cuda" if (torch.cuda.is_available() and not os.environ.get("SPACE_ID")) else "cpu"
         self.processor = None
         self.model = None
         self.use_lm = False
@@ -39,13 +40,28 @@ class ASRModel:
             padding=True,
         )
 
-    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, input_values: torch.Tensor, device: str = "cpu") -> torch.Tensor:
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        input_values = input_values.to(self.device)
-        outputs = self.model(input_values)
-        return outputs.logits
+        # On local runs (non-Space), auto-detect CUDA
+        if not os.environ.get("SPACE_ID") and torch.cuda.is_available():
+            device = "cuda"
+
+        if device == "cuda":
+            self.model.to("cuda")
+            input_values = input_values.to("cuda")
+            outputs = self.model(input_values)
+            logits = outputs.logits
+            if os.environ.get("SPACE_ID"):
+                # Cleanly return model to CPU after inference so ZeroGPU can release GPU lease
+                self.model.to("cpu")
+            return logits
+        else:
+            self.model.to("cpu")
+            input_values = input_values.to("cpu")
+            outputs = self.model(input_values)
+            return outputs.logits
 
     def decode(self, logits: torch.Tensor, decode_mode: str = "greedy") -> str:
         """
@@ -63,14 +79,10 @@ class ASRModel:
 
         decode_mode = (decode_mode or "greedy").lower().strip()
 
-        if decode_mode == "lm":
-            if not isinstance(self.processor, Wav2Vec2ProcessorWithLM):
-                raise RuntimeError(
-                )
-            decoded = self.processor.batch_decode(
-                logits.detach().cpu().numpy()
-            )
-            text = decoded.text[0]
+        if decode_mode == "lm" and isinstance(self.processor, Wav2Vec2ProcessorWithLM):
+            logits_np = logits.detach().cpu().numpy()
+            decoded = self.processor.decode(logits_np[0])
+            text = decoded.text
 
         else:
             pred_ids = torch.argmax(logits, dim=-1)
@@ -100,7 +112,7 @@ class ASRModel:
         return t
 
     @torch.inference_mode()
-    def transcribe(self, audio: np.ndarray, decode_mode: str = "greedy") -> str:
+    def transcribe(self, audio: np.ndarray, decode_mode: str = "greedy", device: str = "cpu") -> str:
         """
         Transcribe audio using either greedy CTC decoding or LM decoding.
         """
@@ -108,7 +120,7 @@ class ASRModel:
             raise RuntimeError("Model not loaded. Call load() first.")
 
         inputs = self.get_input_features(audio)
-        logits = self.forward(inputs.input_values)
+        logits = self.forward(inputs.input_values, device=device)
 
         return self.decode(logits, decode_mode=decode_mode)
 
@@ -152,15 +164,23 @@ class ASRModel:
 
         try:
             if use_lm:
-                self.processor = Wav2Vec2ProcessorWithLM.from_pretrained(path)
-                self.use_lm = True
-                print(f"  Loaded processor WITH language model from: {path}")
+                try:
+                    self.processor = Wav2Vec2ProcessorWithLM.from_pretrained(path)
+                    self.use_lm = True
+                    print(f"  Loaded processor WITH language model from: {path}")
+                except Exception as lm_err:
+                    print(
+                        f"  [WARNING] Language model processor failed to load ({lm_err}). "
+                        f"Falling back to standard Wav2Vec2Processor (Greedy CTC)."
+                    )
+                    self.processor = Wav2Vec2Processor.from_pretrained(path)
+                    self.use_lm = False
             else:
                 self.processor = Wav2Vec2Processor.from_pretrained(path)
                 self.use_lm = False
                 print(f"  Loaded processor from: {path}")
 
-        except OSError as e:
+        except Exception as e:
             if processor_fallback_path and os.path.exists(processor_fallback_path):
                 print(
                     f"  Processor not found in checkpoint, loading from: "
@@ -168,14 +188,24 @@ class ASRModel:
                 )
 
                 if use_lm:
-                    self.processor = Wav2Vec2ProcessorWithLM.from_pretrained(
-                        processor_fallback_path
-                    )
-                    self.use_lm = True
-                    print(
-                        f"  Loaded fallback processor WITH language model from: "
-                        f"{processor_fallback_path}"
-                    )
+                    try:
+                        self.processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+                            processor_fallback_path
+                        )
+                        self.use_lm = True
+                        print(
+                            f"  Loaded fallback processor WITH language model from: "
+                            f"{processor_fallback_path}"
+                        )
+                    except Exception as fallback_lm_err:
+                        print(
+                            f"  [WARNING] Fallback LM processor failed ({fallback_lm_err}). "
+                            f"Falling back to standard processor."
+                        )
+                        self.processor = Wav2Vec2Processor.from_pretrained(
+                            processor_fallback_path
+                        )
+                        self.use_lm = False
                 else:
                     self.processor = Wav2Vec2Processor.from_pretrained(
                         processor_fallback_path

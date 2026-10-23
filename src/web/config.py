@@ -26,7 +26,7 @@ def resolve_model_path() -> str:
             return candidate
 
     # If model is not found locally, check if Hugging Face repo ID is configured
-    hf_repo = os.environ.get("HF_MODEL_REPO_ID")
+    hf_repo = os.environ.get("HF_MODEL_REPO_ID", "siddiqrossli/asr-lecture-model")
     if hf_repo:
         try:
             from huggingface_hub import snapshot_download
@@ -51,7 +51,13 @@ def resolve_model_path() -> str:
     return explicit_path or r"D:\final year project\model_100k_clean_v2_1k_lm"
 
 
-class WebConfig:
+class _WebConfigMeta(type):
+    @property
+    def MODEL_PATH(cls) -> str:
+        return cls.get_model_path()
+
+
+class WebConfig(metaclass=_WebConfigMeta):
     SECRET_KEY = os.environ.get("SECRET_KEY") or "change-me-in-production"
 
     # Flask server settings
@@ -69,8 +75,14 @@ class WebConfig:
         ".mp4", ".mov", ".avi", ".mkv", ".webm"
     }
 
-    # Model path
-    MODEL_PATH = resolve_model_path()
+    _RESOLVED_MODEL_PATH: str | None = None
+
+    @classmethod
+    def get_model_path(cls) -> str:
+        """Resolve model path lazily when needed by ASR inference, never blocking server boot."""
+        if cls._RESOLVED_MODEL_PATH is None:
+            cls._RESOLVED_MODEL_PATH = resolve_model_path()
+        return cls._RESOLVED_MODEL_PATH
 
     # Audio settings
     TARGET_SR = 16000
@@ -97,6 +109,10 @@ class WebConfig:
     TRANSCRIPT_LIBRARY_DIR = os.environ.get("TRANSCRIPT_LIBRARY_DIR") or str(
         (Path(__file__).resolve().parent / "data" / "transcripts").resolve()
     )
+
+    # Hide public library and disable disk persistence when running online in Hugging Face Space
+    HIDE_LIBRARY = os.environ.get("HIDE_LIBRARY", "1" if os.environ.get("SPACE_ID") else "0").lower() in {"1", "true", "yes"}
+
 
     # Optional LLM features (see ai_service.py and .env.example)
     # ASR model path and pipeline are unchanged when AI is enabled.

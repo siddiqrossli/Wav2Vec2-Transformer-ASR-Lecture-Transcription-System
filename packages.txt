@@ -1,2 +1,8 @@
 ffmpeg
 libsndfile1
+build-essential
+cmake
+libboost-all-dev
+zlib1g-dev
+libbz2-dev
+liblzma-dev
