@@ -1,13 +1,3 @@
----
-title: ClassScript - ASR Lecture Transcriber
-emoji: 🎙️
-colorFrom: indigo
-colorTo: purple
-sdk: gradio
-app_file: app.py
-pinned: false
----
-
 # 🎙️ ClassScript: ASR Lecture Transcriber & AI Study Assistant
 
 <div align="center">

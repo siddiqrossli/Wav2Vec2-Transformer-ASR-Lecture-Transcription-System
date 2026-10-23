@@ -29,8 +29,8 @@ def main():
         shutil.rmtree(staging_dir)
     staging_dir.mkdir(parents=True)
 
-    # 1. Copy top-level manifests
-    top_files = ["README.md", "app.py", "packages.txt", "requirements.txt"]
+    # 1. Copy top-level manifests & LICENSE
+    top_files = ["LICENSE", "app.py", "packages.txt", "requirements.txt"]
     for fname in top_files:
         src_file = project_root / fname
         if src_file.is_file():
@@ -38,6 +38,27 @@ def main():
             print(f"  + Copied {fname}")
         else:
             print(f"  ! Warning: {fname} not found!")
+
+    # Prepare README.md with required Hugging Face Spaces YAML frontmatter
+    readme_src = project_root / "README.md"
+    readme_dest = staging_dir / "README.md"
+    if readme_src.is_file():
+        readme_content = readme_src.read_text(encoding="utf-8")
+        if not readme_content.startswith("---"):
+            hf_frontmatter = """---
+title: ClassScript - ASR Lecture Transcriber
+emoji: 🎙️
+colorFrom: indigo
+colorTo: purple
+sdk: gradio
+app_file: app.py
+pinned: false
+---
+
+"""
+            readme_content = hf_frontmatter + readme_content
+        readme_dest.write_text(readme_content, encoding="utf-8")
+        print("  + Prepared README.md with Hugging Face Space metadata")
 
     # 2. Copy src directory (excluding pycache, uploads, transcripts, images, env)
     def ignore_filter(dir_path, names):
