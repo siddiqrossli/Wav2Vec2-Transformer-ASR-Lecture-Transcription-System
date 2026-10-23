@@ -64,6 +64,15 @@ WebConfig.init_app()
 
 _PIPELINE: TranscriptionPipeline | None = None
 
+# Support Hugging Face ZeroGPU with graceful local fallback
+try:
+    import spaces
+    gpu_decorator = spaces.GPU(duration=120)
+    print("[ZeroGPU] spaces.GPU enabled with 120s duration quota")
+except (ImportError, Exception):
+    def gpu_decorator(fn):
+        return fn
+
 
 def convert_media_to_wav(input_path: Path, output_path: Path) -> Path:
     """
@@ -331,6 +340,7 @@ def _split_into_timed_sentences(text: str, duration_s: float) -> List[Dict[str, 
     return segments
 
 
+@gpu_decorator
 def transcribe_audio_direct(
     model: ASRModel,
     audio: np.ndarray,
@@ -345,6 +355,7 @@ def transcribe_audio_direct(
     return raw_text, segment_items
 
 
+@gpu_decorator
 def transcribe_audio_in_chunks(
     pipe: TranscriptionPipeline,
     audio: np.ndarray,
@@ -522,6 +533,17 @@ def transcribe():
         audio = _normalize_audio(audio)
 
         duration_s = float(len(audio)) / float(WebConfig.TARGET_SR)
+
+        max_allowed_s = (getattr(WebConfig, "MAX_AUDIO_MINUTES", 0) or 0) * 60
+        if max_allowed_s > 0 and duration_s > max_allowed_s:
+            max_mins = int(WebConfig.MAX_AUDIO_MINUTES)
+            actual_mins = duration_s / 60.0
+            flash(
+                f"Audio duration ({actual_mins:.1f} mins) exceeds the online demo limit of {max_mins} mins. "
+                "Please upload a lecture clip up to 30-35 minutes.",
+                "error",
+            )
+            return redirect(url_for("index", upload=1))
 
         pipe = _get_pipeline()
 
@@ -906,13 +928,16 @@ def api_export_pdf():
 
 if __name__ == "__main__":
     print("Starting ASR Web Interface...")
+    print(f"Address: http://{WebConfig.HOST}:{WebConfig.PORT}")
+    print(f"Debug mode: {WebConfig.DEBUG}")
     print(f"Upload folder: {WebConfig.UPLOAD_FOLDER}")
     print(f"Model path: {WebConfig.MODEL_PATH}")
     cleanup_old_uploads()
 
     app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True,
-        use_reloader=True,
+        host=WebConfig.HOST,
+        port=WebConfig.PORT,
+        debug=WebConfig.DEBUG,
+        use_reloader=WebConfig.DEBUG,
     )
+

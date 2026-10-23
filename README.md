@@ -1,3 +1,13 @@
+---
+title: ClassScript - ASR Lecture Transcriber
+emoji: 🎙️
+colorFrom: indigo
+colorTo: purple
+sdk: gradio
+app_file: app.py
+pinned: false
+---
+
 # ASR Lecture Transcriber & Study Assistant
 
 An end-to-end Automatic Speech Recognition (ASR) system designed for academic lecture transcription, featuring acoustic modeling, n-gram language model decoding, and an AI-powered study companion.
@@ -86,13 +96,30 @@ To enable the AI Study Assistant (Summary, Quiz, Glossary, Flashcards, Chat):
    LLM_MODEL=gemini-3.5-flash
    ```
 
-### 4. Running the Web Application
+### 4. Running the Web Application Locally
 
 ```bash
 python src/web/app.py
 ```
 
 Open your browser at [http://127.0.0.1:5000](http://127.0.0.1:5000).
+
+---
+
+## 🚀 Online Deployment (Hugging Face Spaces)
+
+This system is configured to run 24/7 on [Hugging Face Spaces](https://huggingface.co/spaces) using Docker:
+
+1. **Upload Model Weights**:
+   ```bash
+   python scripts/upload_model_to_hf.py --repo_id "your-username/asr-lecture-model"
+   ```
+2. **Deploy to Spaces**:
+   - Create a new Docker Space on Hugging Face.
+   - Push this repository to your Space.
+   - Set `GEMINI_API_KEY` and `HF_MODEL_REPO_ID` in your Space's Secrets settings.
+
+For full step-by-step instructions with screenshots and tips, see [docs/deploy_huggingface_spaces.md](docs/deploy_huggingface_spaces.md).
 
 ---
 

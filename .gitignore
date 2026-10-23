@@ -53,3 +53,7 @@ runs/
 Thumbs.db
 .vscode/
 .idea/
+
+# HF Spaces Docker files (Space uses native Gradio SDK)
+Dockerfile
+.dockerignore
