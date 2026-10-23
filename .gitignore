@@ -57,3 +57,4 @@ Thumbs.db
 # HF Spaces Docker files (Space uses native Gradio SDK)
 Dockerfile
 .dockerignore
+.deploy_staging/

@@ -180,6 +180,8 @@ def transcribe_lecture(
     media_file: str,
     decode_mode: str,
     lecture_title: str,
+    course_code: str = "",
+    speaker_name: str = "",
     progress=gr.Progress(track_tqdm=True),
 ):
     if not media_file:
@@ -210,6 +212,8 @@ def transcribe_lecture(
         wc = word_count(full_text)
         reading_time = reading_time_label(wc)
         title = lecture_title.strip() or "Lecture Transcript"
+        course_str = f"- **Course**: {course_code.strip()}\n" if course_code.strip() else ""
+        speaker_str = f"- **Speaker**: {speaker_name.strip()}\n" if speaker_name.strip() else ""
 
         # Formatted markdown segments
         segment_lines = [f"### ⏱️ Timestamped Transcript — {title}\n"]
@@ -220,11 +224,12 @@ def transcribe_lecture(
         stats_md = f"""
 ### 📊 Lecture Overview
 - **Title**: {title}
-- **Duration**: {fmt_timestamp(duration_s)} ({duration_mins:.1f} mins)
+{course_str}{speaker_str}- **Duration**: {fmt_timestamp(duration_s)} ({duration_mins:.1f} mins)
 - **Word Count**: {wc:,} words
 - **Reading Time**: ~{reading_time}
 - **Decoding**: {'N-gram LM Beam Search' if 'lm' in decode_mode.lower() else 'Greedy CTC'}
 """
+
 
         # Export files
         txt_path = os.path.join(temp_dir, f"{title.replace(' ', '_')}.txt")
@@ -359,83 +364,321 @@ def ai_chat_handler(message: str, history: List[Tuple[str, str]], transcript: st
 
 
 # -------------------------------------------------------------
-# Gradio Portfolio UI
+# ClassScript Original UI Theme & Layout
 # -------------------------------------------------------------
 
 CUSTOM_CSS = """
-.main-header { text-align: center; margin-bottom: 1.5rem; }
-.main-header h1 { font-size: 2.2rem; font-weight: 800; color: #4f46e5; margin-bottom: 0.2rem; }
-.main-header p { font-size: 1.05rem; color: #6b7280; margin-bottom: 0.5rem; }
-.badges-container { display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.badge { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; background: #e0e7ff; color: #3730a3; }
-.primary-btn { background: #4f46e5 !important; color: white !important; font-weight: 700 !important; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css');
+
+:root {
+    --primary: #256d85;
+    --primary-dark: #1f5668;
+    --primary-soft: #e7f3f6;
+    --accent: #d9a441;
+    --bg: #eef3f6;
+    --panel: #ffffff;
+    --text: #172033;
+    --muted: #667085;
+    --border: #d9e2e7;
+    --shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+}
+
+body, .gradio-container {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    background: radial-gradient(circle at top left, rgba(37, 109, 133, 0.12), transparent 35%), linear-gradient(135deg, #eef3f6, #f8fafc) !important;
+    color: var(--text) !important;
+}
+
+/* Brand Navbar */
+.cs-navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.1rem 1.6rem;
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.cs-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    text-decoration: none;
+}
+
+.cs-brand-icon {
+    width: 46px;
+    height: 46px;
+    background: linear-gradient(135deg, #256d85, #1f5668);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1.35rem;
+    box-shadow: 0 4px 12px rgba(37, 109, 133, 0.35);
+}
+
+.cs-brand-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.cs-brand-text strong {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #172033;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.cs-brand-text small {
+    font-size: 0.85rem;
+    color: #256d85;
+    font-weight: 600;
+}
+
+.cs-tech-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.cs-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: #e7f3f6;
+    color: #256d85;
+    border: 1px solid rgba(37, 109, 133, 0.25);
+}
+
+.cs-pill.gpu {
+    background: rgba(217, 164, 65, 0.15);
+    color: #b47d1b;
+    border-color: rgba(217, 164, 65, 0.4);
+}
+
+/* Workflow Guide Card (from index.html) */
+.workflow-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 1.25rem 1.4rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1.2rem;
+}
+
+.workflow-card h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #172033;
+    margin-bottom: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.workflow-card h3 i {
+    color: #256d85;
+}
+
+.workflow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    margin-bottom: 0.8rem;
+}
+
+.workflow-step:last-child {
+    margin-bottom: 0;
+}
+
+.workflow-num {
+    background: #e7f3f6;
+    color: #256d85;
+    font-weight: 800;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    min-width: 26px;
+    text-align: center;
+}
+
+.workflow-body strong {
+    font-size: 0.86rem;
+    color: #172033;
+    display: block;
+}
+
+.workflow-body p {
+    font-size: 0.76rem;
+    color: #667085;
+    margin: 0;
+}
+
+/* Primary Button Styling */
+button.primary, .primary-btn {
+    background: linear-gradient(135deg, #256d85, #1f5668) !important;
+    color: #ffffff !important;
+    border: none !important;
+    font-weight: 700 !important;
+    font-size: 1.05rem !important;
+    border-radius: 10px !important;
+    padding: 0.85rem 1.6rem !important;
+    box-shadow: 0 4px 14px rgba(37, 109, 133, 0.35) !important;
+    transition: all 0.2s ease !important;
+}
+
+button.primary:hover, .primary-btn:hover {
+    background: linear-gradient(135deg, #1f5668, #164352) !important;
+    box-shadow: 0 6px 20px rgba(37, 109, 133, 0.5) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Card Wrappers */
+.gr-panel, .gr-box {
+    border-radius: 14px !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: var(--shadow) !important;
+}
+
+/* Tabs */
+.tab-nav button.selected {
+    color: #256d85 !important;
+    border-bottom: 2px solid #256d85 !important;
+    font-weight: 700 !important;
+}
 """
 
 theme = gr.themes.Soft(
-    primary_hue="indigo",
+    primary_hue="cyan",
     secondary_hue="blue",
     neutral_hue="slate",
 )
 
 with gr.Blocks(title="ClassScript - ASR Lecture Transcriber & Study Assistant") as demo:
-    # State storage for current transcript across tabs
+    # State storage for current transcript across tabs (Stateless memory, no persistent files stored)
     active_transcript = gr.State("")
 
     gr.HTML(f"""
     <style>
     {CUSTOM_CSS}
     </style>
-    <div class="main-header">
-        <h1>🎙️ ClassScript — ASR Lecture Transcriber</h1>
-        <p>End-to-End Automatic Speech Recognition & AI Study Companion for Academic Lectures</p>
-        <div class="badges-container">
-            <span class="badge">Fine-Tuned Wav2Vec 2.0</span>
-            <span class="badge">KenLM N-Gram LM Rescoring</span>
-            <span class="badge">Google Gemini AI</span>
-            <span class="badge">Hugging Face ZeroGPU</span>
+    <header class="cs-navbar">
+        <div class="cs-brand">
+            <div class="cs-brand-icon"><i class="fa-solid fa-microphone-lines"></i></div>
+            <div class="cs-brand-text">
+                <strong>ClassScript</strong>
+                <small>Lecture Transcriber & Study Assistant</small>
+            </div>
         </div>
-    </div>
+        <div class="cs-tech-badges">
+            <span class="cs-pill"><i class="fa-solid fa-brain"></i> Fine-Tuned Wav2Vec 2.0</span>
+            <span class="cs-pill"><i class="fa-solid fa-bolt"></i> KenLM N-Gram LM Rescoring</span>
+            <span class="cs-pill"><i class="fa-solid fa-wand-magic-sparkles"></i> Gemini AI</span>
+            <span class="cs-pill gpu"><i class="fa-solid fa-microchip"></i> ZeroGPU RTX 6000</span>
+        </div>
+    </header>
     """)
 
     with gr.Tabs():
         # --- TAB 1: Transcription ---
-        with gr.Tab("🎙️ Transcribe Lecture", id="tab-transcribe"):
+        with gr.Tab("🎙️ Start Transcription", id="tab-transcribe"):
             with gr.Row():
-                with gr.Column(scale=1):
+                with gr.Column(scale=5):
                     media_input = gr.File(
                         label="Upload Lecture Media (Audio or Video)",
                         file_types=["audio", "video"],
                     )
-                    lecture_title_input = gr.Textbox(
-                        label="Lecture Title (Optional)",
-                        placeholder="e.g. CS101 - Introduction to Deep Learning",
-                    )
+                    with gr.Row():
+                        lecture_title_input = gr.Textbox(
+                            label="Lecture Title",
+                            placeholder="e.g. Introduction to Machine Learning",
+                            scale=2,
+                        )
+                        course_code_input = gr.Textbox(
+                            label="Course Code",
+                            placeholder="e.g. CSC 101",
+                            scale=1,
+                        )
+                        speaker_name_input = gr.Textbox(
+                            label="Speaker Name",
+                            placeholder="e.g. Dr. Jane Smith",
+                            scale=1,
+                        )
+
                     decode_mode_input = gr.Radio(
-                        choices=["N-gram LM Beam Search (Best Accuracy)", "Greedy CTC (Faster Baseline)"],
-                        value="N-gram LM Beam Search (Best Accuracy)",
+                        choices=["N-gram LM Beam Search (Higher accuracy)", "Greedy CTC Decoding (Faster baseline)"],
+                        value="N-gram LM Beam Search (Higher accuracy)",
                         label="ASR Decoding Strategy",
-                        info="LM Beam Search rescores predictions with an n-gram language model for lecture domain accuracy.",
+                        info="LM Beam Search rescores acoustic predictions with a domain language model for academic terminology.",
                     )
                     transcribe_btn = gr.Button("✨ Start Transcription", variant="primary", size="lg")
-                    gr.Markdown("💡 *Optimized for lecture clips up to 30–35 minutes on ZeroGPU.*")
+                    gr.Markdown("💡 *Accelerated on Nvidia RTX 6000 ZeroGPU. Recommended audio: up to 30–35 minutes.*")
 
-                with gr.Column(scale=1):
-                    stats_display = gr.Markdown("### 📊 Lecture Overview\n*Upload and transcribe a file to see metrics.*")
+                with gr.Column(scale=4):
+                    # Original UI Workflow Guide Card
+                    gr.HTML("""
+                    <div class="workflow-card">
+                        <h3><i class="fa-solid fa-route"></i> How It Works</h3>
+                        <div class="workflow-step">
+                            <span class="workflow-num">01</span>
+                            <div class="workflow-body">
+                                <strong>Upload media</strong>
+                                <p>Drop audio or video file in any format (.mp3, .wav, .mp4, .m4a).</p>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="workflow-num">02</span>
+                            <div class="workflow-body">
+                                <strong>Preprocess audio</strong>
+                                <p>FFmpeg converts audio to normalized 16 kHz mono speech waveform.</p>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="workflow-num">03</span>
+                            <div class="workflow-body">
+                                <strong>Run ASR decoding</strong>
+                                <p>Fine-tuned Wav2Vec 2.0 with KenLM n-gram language model rescoring.</p>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="workflow-num">04</span>
+                            <div class="workflow-body">
+                                <strong>Review & Study</strong>
+                                <p>Synchronized audio, timestamped segments, AI summary, quiz & flashcards.</p>
+                            </div>
+                        </div>
+                    </div>
+                    """)
+                    stats_display = gr.Markdown("### 📊 Lecture Overview\n*Upload a file and click Start Transcription to view metrics.*")
                     audio_player = gr.Audio(label="Audio Playback", type="filepath")
 
             with gr.Row():
-                with gr.Column(scale=1):
+                with gr.Column(scale=5):
                     transcript_output = gr.Textbox(
                         label="Full Text Transcript",
-                        lines=12,
-                        placeholder="Transcription will appear here...",
+                        lines=14,
+                        placeholder="Complete transcription will appear here...",
                     )
                     with gr.Row():
                         download_txt = gr.File(label="Download Transcript (.txt)")
                         download_json = gr.File(label="Download Transcript (.json)")
 
-                with gr.Column(scale=1):
-                    segments_output = gr.Markdown("### ⏱️ Timestamped Segments\n*Segments will appear here...*")
+                with gr.Column(scale=4):
+                    segments_output = gr.Markdown("### ⏱️ Timestamped Segments\n*Segment breakdowns will appear here...*")
 
         # --- TAB 2: AI Summary ---
         with gr.Tab("📑 AI Summary", id="tab-summary"):
@@ -461,7 +704,7 @@ with gr.Blocks(title="ClassScript - ASR Lecture Transcriber & Study Assistant") 
                     gen_flashcards_btn = gr.Button("🗂️ Generate Flashcards", variant="primary")
                     flashcards_display = gr.Markdown("*Click button to generate interactive revision flashcards.*")
 
-        # --- TAB 5: Chat with Lecture (RAG) ---
+        # --- TAB 5: Chat with Lecture ---
         with gr.Tab("💬 Chat with Lecture", id="tab-chat"):
             gr.Markdown("Ask specific questions about the lecture content. Answers are grounded strictly in the transcript.")
             chatbot_ui = gr.Chatbot(label="Lecture Assistant", height=420)
@@ -479,7 +722,13 @@ with gr.Blocks(title="ClassScript - ASR Lecture Transcriber & Study Assistant") 
     # -------------------------------------------------------------
     transcribe_btn.click(
         fn=transcribe_lecture,
-        inputs=[media_input, decode_mode_input, lecture_title_input],
+        inputs=[
+            media_input,
+            decode_mode_input,
+            lecture_title_input,
+            course_code_input,
+            speaker_name_input,
+        ],
         outputs=[
             transcript_output,
             segments_output,
@@ -490,6 +739,7 @@ with gr.Blocks(title="ClassScript - ASR Lecture Transcriber & Study Assistant") 
             active_transcript,
         ],
     )
+
 
     gen_summary_btn.click(
         fn=ai_summary_handler,
@@ -531,3 +781,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
     host = os.environ.get("HOST", "0.0.0.0")
     demo.launch(server_name=host, server_port=port, theme=theme)
+
